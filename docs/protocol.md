@@ -71,8 +71,13 @@ edit advances the revision and invalidates prior approval.
 ## Validation
 
 Structural validation checks protocol shape and types. Semantic validation checks unique IDs, option
-membership, required values, finite numeric inputs, bounded/non-nested regular-expression patterns,
-validation constraints, unresolved blockers, and conflicts.
+membership, required values, finite numeric inputs, validation constraints, unresolved blockers,
+and conflicts.
+
+`validation.pattern` is a server-enforced RE2 full-match expression limited to 512 characters.
+RE2 provides linear-time matching and rejects backreferences, look-around, and other constructs that
+require backtracking. The browser never receives the expression as an HTML `pattern` attribute;
+server validation is authoritative for both stored updates and approval readiness.
 
 Readiness for approval requires no error-level semantic issues. Approval records the revision and
 SHA-256 digest of the canonical JSON document. Compilation recomputes both, so changing

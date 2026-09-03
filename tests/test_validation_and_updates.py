@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import time
 from copy import deepcopy
 
 from fastapi.testclient import TestClient
@@ -111,12 +112,25 @@ def test_non_finite_number_is_rejected_before_json_handoff():
     assert {issue.code for issue in issues} == {"non-finite-number"}
 
 
-def test_nested_quantifier_pattern_is_rejected_without_evaluating_user_value():
+def test_ambiguous_alternation_pattern_is_evaluated_in_linear_time():
     document = minimal_document()
     field = document["tabs"][0]["sections"][0]["fields"][0]
     field["value"] = "a" * 100_000 + "!"
-    field["validation"] = {"pattern": "(a+)+$"}
+    field["validation"] = {"pattern": "^(a|aa)+$"}
+
+    started = time.perf_counter()
+    issues = validate_document(document)
+    elapsed = time.perf_counter() - started
+
+    assert {issue.code for issue in issues} == {"pattern"}
+    assert elapsed < 1
+
+
+def test_backtracking_only_regex_features_are_rejected_as_invalid_re2():
+    document = minimal_document()
+    field = document["tabs"][0]["sections"][0]["fields"][0]
+    field["validation"] = {"pattern": r"^(a)\1$"}
 
     issues = validate_document(document)
 
-    assert {issue.code for issue in issues} == {"unsafe-pattern"}
+    assert {issue.code for issue in issues} == {"invalid-pattern"}

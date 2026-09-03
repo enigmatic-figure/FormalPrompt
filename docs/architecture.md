@@ -96,6 +96,8 @@ replacement passes the current revision, and every subsequent edit invalidates t
 - Put the initial token in the URL fragment so it is not sent in HTTP requests or logs; the UI stores it in session storage and removes the fragment.
 - Reject cross-origin state changes and do not enable permissive CORS.
 - Treat all document strings and assistant output as data; render with text nodes, never `innerHTML`.
+- Evaluate agent-authored field patterns only with bounded RE2; never forward them to a browser
+  regular-expression engine.
 - Do not accept document-supplied scripts, event handlers, URLs, or filesystem paths.
 - Restrict writes to the run directory until a distinct, explicit export operation exists.
 - Keep model credentials in the host environment and out of documents, events, and browser responses.

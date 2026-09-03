@@ -26,7 +26,6 @@ PROPOSAL_DEFINITION_ERROR_CODES = {
     "duplicate-option",
     "missing-options",
     "invalid-pattern",
-    "unsafe-pattern",
     "invalid-length-range",
     "invalid-number-range",
     "invalid-type",

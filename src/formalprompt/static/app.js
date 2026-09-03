@@ -219,7 +219,6 @@ function makeControl(field) {
     if (field.validation.maximum !== null) control.max = field.validation.maximum;
     if (field.validation.min_length !== null) control.minLength = field.validation.min_length;
     if (field.validation.max_length !== null) control.maxLength = field.validation.max_length;
-    if (field.validation.pattern) control.pattern = field.validation.pattern;
   }
   control.addEventListener("change", () => saveField(field, readControlValue(field, control)));
   return control;

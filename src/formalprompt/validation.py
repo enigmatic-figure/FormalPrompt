@@ -1,20 +1,18 @@
 from __future__ import annotations
 
 import math
-import re
 from pathlib import PurePosixPath
 from typing import Any, Literal
 
+import re2
 from pydantic import BaseModel
 
 from formalprompt.models import CanvasDocument, CanvasField
 
-ARTIFACT_PATH_PATTERN = re.compile(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*")
-MAX_VALIDATION_PATTERN_LENGTH = 512
-NESTED_QUANTIFIER_PATTERN = re.compile(
-    r"\((?:\\.|[^()])*(?:[+*]|\{\d+(?:,\d*)?\})(?:\\.|[^()])*\)"
-    r"(?:[+*]|\{\d+(?:,\d*)?\})"
-)
+RE2_OPTIONS = re2.Options()
+RE2_OPTIONS.log_errors = False
+RE2_OPTIONS.max_mem = 8 * 1024 * 1024
+ARTIFACT_PATH_PATTERN = re2.compile(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*", options=RE2_OPTIONS)
 
 
 class ValidationIssue(BaseModel):
@@ -162,23 +160,12 @@ def _validate_field(field: CanvasField) -> list[ValidationIssue]:
     rules = field.validation
     compiled_pattern = None
     if rules.pattern is not None:
-        if len(rules.pattern) > MAX_VALIDATION_PATTERN_LENGTH or NESTED_QUANTIFIER_PATTERN.search(
-            rules.pattern
-        ):
+        try:
+            compiled_pattern = re2.compile(rules.pattern, options=RE2_OPTIONS)
+        except re2.error:
             issues.append(
-                _issue(
-                    "unsafe-pattern",
-                    f"{field.label} has a pattern that is unsafe to evaluate interactively",
-                    field.id,
-                )
+                _issue("invalid-pattern", f"{field.label} is not a valid RE2 pattern", field.id)
             )
-        else:
-            try:
-                compiled_pattern = re.compile(rules.pattern)
-            except re.error:
-                issues.append(
-                    _issue("invalid-pattern", f"{field.label} has an invalid pattern", field.id)
-                )
     if (
         rules.min_length is not None
         and rules.max_length is not None

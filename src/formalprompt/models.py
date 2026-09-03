@@ -24,7 +24,11 @@ class Option(StrictModel):
 class FieldValidation(StrictModel):
     min_length: int | None = Field(default=None, ge=0)
     max_length: int | None = Field(default=None, ge=0)
-    pattern: str | None = None
+    pattern: str | None = Field(
+        default=None,
+        max_length=512,
+        description="Server-enforced RE2 full-match pattern; never executed by the browser.",
+    )
     minimum: float | None = None
     maximum: float | None = None
 

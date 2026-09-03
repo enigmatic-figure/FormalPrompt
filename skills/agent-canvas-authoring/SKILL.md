@@ -62,6 +62,8 @@ formalprompt result <run-directory> --json
 ## Pitfalls
 
 - Do not generate JavaScript, event handlers, URLs, or filesystem paths in a canvas document; the v1 schema intentionally rejects them.
+- Write `validation.pattern` values using RE2 syntax and keep them within 512 characters. Do not rely
+  on look-around or backreferences; validation is authoritative at the broker, not in the browser.
 - Do not mark an assumption `explicit` merely because it seems obvious.
 - Do not stream browser events, facilitator transcripts, or `events.jsonl` into the primary agent context.
 - Carbonyl is a terminal Chromium renderer, but native availability varies by platform. On native Windows, prefer the graphical renderer or use Carbonyl through a supported Linux environment.

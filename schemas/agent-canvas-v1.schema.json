@@ -188,6 +188,7 @@
         "pattern": {
           "anyOf": [
             {
+              "maxLength": 512,
               "type": "string"
             },
             {
@@ -195,6 +196,7 @@
             }
           ],
           "default": null,
+          "description": "Server-enforced RE2 full-match pattern; never executed by the browser.",
           "title": "Pattern"
         },
         "minimum": {

@@ -15,7 +15,7 @@ The canonical state is the canvas document. The browser, facilitator, reviewer, 
 - Tabbed, responsive forms with six native field types.
 - Visible provenance, review state, importance, rationale, and blocker treatment.
 - Optimistic revisions, autosave, atomic JSON replacement, and append-only events.
-- Deterministic validation with crash-safe malformed-rule handling.
+- Deterministic validation with RE2-backed, guaranteed-linear user patterns.
 - Revision-and-document-digest-bound approval with automatic invalidation after edits.
 - Recoverable `approved -> compiling -> compiled` transactions and strictly verified results.
 - Staged Markdown/JSON handoffs with SHA-256 manifest and machine-readable result.
@@ -189,6 +189,8 @@ skills, prompts, or project files is an intentionally separate operation.
 - Unguessable bearer token delivered in the URL fragment and cleared after bootstrap.
 - No permissive CORS, framing, external scripts, or agent-supplied executable browser code.
 - All document and assistant strings render as text.
+- Agent-authored validation patterns execute only in server-side RE2 and are never forwarded to the
+  browser's native backtracking regex engine.
 - Assistant commands run without a shell and receive scoped JSON.
 - Model credentials remain in the host environment.
 - Assistant output cannot mutate canonical state automatically.

@@ -22,6 +22,7 @@ def test_browser_shell_is_packaged_and_hardened(tmp_path):
     assert page.headers["referrer-policy"] == "no-referrer"
     assert script.status_code == 200
     assert "innerHTML" not in script.text
+    assert "control.pattern" not in script.text
     assert "textContent" in script.text
     assert "Authorization" in script.text
     assert "sessionStorage" in script.text
