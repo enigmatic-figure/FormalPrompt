@@ -7,6 +7,11 @@ response object from standard output.
 
 This is the context-isolation boundary: each invocation can create a fresh model call or fresh agent process, while the primary execution agent receives only the compiled handoff.
 
+For `initialization-compose`, a ready response may include an `agent-workflow/v1` graph alongside
+the staged artifacts. Composer prompts require resource references, pinned capabilities, bounded
+review remediation, declared agent authority, and an acyclic topology. The graph is still advisory
+until the user applies it.
+
 ## Reference OpenAI-compatible adapter
 
 The package installs `formalprompt-openai-assistant`, a standard-library adapter for OpenAI-compatible chat-completions endpoints.

@@ -30,6 +30,7 @@ Construct a declarative canvas from the caller's current understanding, validate
 ```text
 formalprompt template minimal canvas.json
 formalprompt template software-project canvas.json
+formalprompt template workflow-project canvas.json
 formalprompt validate canvas.json --json
 formalprompt open canvas.json --renderer auto --json
 formalprompt open canvas.json --renderer browser --json
@@ -47,7 +48,7 @@ formalprompt result <run-directory> --json
 4. Enable field assistance only where options or tradeoffs are genuinely useful. The assistance prompt must constrain the facilitator rather than invite unrelated scope.
 5. Run `terminal(command="formalprompt validate canvas.json --json")`. Exit code 0 means ready for approval; exit code 2 means structurally valid with issues the canvas is expected to resolve; exit code 1 means fix the document before continuing.
 6. Start the canvas with `terminal(command="formalprompt open canvas.json --renderer auto --json", background=true, notify=true)`. Read the ready event and give the user the URL only if no renderer opened automatically. Confirm the event contains a run ID and run directory.
-7. If an ephemeral composer is configured, let the user request and explicitly apply focused follow-up canvases or a typed initialization package. A separate reviewer command can challenge the resulting canonical document before approval. Never treat an agent proposal as applied merely because it was returned.
+7. If an ephemeral composer is configured, let the user request and explicitly apply focused follow-up canvases or a typed initialization package. For long-horizon work, use the workflow-project template and require an `agent-workflow/v1` graph. A separate reviewer command can challenge the resulting canonical document before approval. Never treat an agent proposal as applied merely because it was returned.
 8. Wait for the process completion notification or inspect it with the `process` tool. Verify the
    result with `formalprompt result <run-directory> --json`; file presence or process exit alone does
    not prove compilation.

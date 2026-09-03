@@ -1,0 +1,323 @@
+{
+  "protocol": "agent-canvas/v1",
+  "kind": "formalprompt/specification",
+  "metadata": {
+    "title": "Agent workflow project",
+    "description": "Confirm the project specification and its executable agent workflow.",
+    "created_by": "primary-agent"
+  },
+  "tabs": [
+    {
+      "id": "intent",
+      "label": "Intent",
+      "sections": [
+        {
+          "id": "intent.core",
+          "title": "Project outcome",
+          "fields": [
+            {
+              "id": "project.objective",
+              "label": "Objective",
+              "type": "textarea",
+              "value": null,
+              "description": "State the concrete outcome this workflow must produce.",
+              "placeholder": "What should be true when execution is complete?",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "unresolved",
+              "review_status": "needs-input",
+              "validation": {"min_length": 10},
+              "assistance": {
+                "enabled": true,
+                "prompt": "Help state a measurable objective without inventing scope."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "completion": {
+    "require_user_approval": true,
+    "require_independent_review": true
+  },
+  "initialization": {
+    "primary_artifact": "prompt.implement",
+    "artifacts": [
+      {
+        "id": "prompt.implement",
+        "path": "prompts/IMPLEMENT.md",
+        "kind": "primary-prompt",
+        "title": "Implementation prompt",
+        "content": "# Implementation\n\nImplement the user-approved specification. Preserve declared boundaries and satisfy the node acceptance criteria.\n",
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high"
+      },
+      {
+        "id": "agent.codex",
+        "path": "agents/CODEX.agent.md",
+        "kind": "agent-definition",
+        "title": "Codex execution agent",
+        "content": "# Codex execution agent\n\nFollow the compiled workflow contract. Inspect actual repository state, preserve intended behavior, verify each change, and record deviations rather than silently changing approved intent.\n",
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high"
+      },
+      {
+        "id": "prompt.verify",
+        "path": "prompts/VERIFY.md",
+        "kind": "primary-prompt",
+        "title": "Verification prompt",
+        "content": "# Verification\n\nRun the checks named by the project specification and preserve bounded evidence for every result.\n",
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high"
+      },
+      {
+        "id": "prompt.review",
+        "path": "prompts/REVIEW.md",
+        "kind": "primary-prompt",
+        "title": "Independent review prompt",
+        "content": "# Independent review\n\nReview the immutable repository checkpoint and complete initialized state adversarially. Report reproducible findings and do not approve until blockers are resolved.\n",
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high"
+      },
+      {
+        "id": "template.repair",
+        "path": "templates/REPAIR.md",
+        "kind": "workflow-template",
+        "title": "Review repair template",
+        "content": "# Repair attempt\n\nAddress every confirmed review finding while preserving the approved specification. Re-run relevant verification and report unresolved findings honestly.\n",
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high"
+      }
+    ]
+  },
+  "workflow": {
+    "protocol": "agent-workflow/v1",
+    "title": "Validated implementation workflow",
+    "description": "Implement, verify, independently review, affirm, and hand off the project.",
+    "resources": [
+      {
+        "id": "prompt.implement",
+        "kind": "prompt",
+        "title": "Implementation prompt",
+        "binding": "initialization-artifact",
+        "reference": "prompt.implement"
+      },
+      {
+        "id": "agent.codex",
+        "kind": "agent-definition",
+        "title": "Codex execution agent",
+        "binding": "initialization-artifact",
+        "reference": "agent.codex"
+      },
+      {
+        "id": "prompt.verify",
+        "kind": "prompt",
+        "title": "Verification prompt",
+        "binding": "initialization-artifact",
+        "reference": "prompt.verify"
+      },
+      {
+        "id": "prompt.review",
+        "kind": "prompt",
+        "title": "Independent review prompt",
+        "binding": "initialization-artifact",
+        "reference": "prompt.review"
+      },
+      {
+        "id": "template.repair",
+        "kind": "template",
+        "title": "Review repair template",
+        "binding": "initialization-artifact",
+        "reference": "template.repair"
+      },
+      {
+        "id": "tool.terminal",
+        "kind": "tool",
+        "title": "Codex terminal",
+        "binding": "harness-capability",
+        "reference": "terminal",
+        "version": "codex-runtime/v1"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "intent",
+        "kind": "input",
+        "title": "Approved intent",
+        "description": "Load the user-affirmed specification and primary prompt.",
+        "position": {"x": 40, "y": 180},
+        "output_ports": [
+          {"id": "next", "label": "Start", "data_type": "control"}
+        ],
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "resource_ids": ["prompt.implement"]
+      },
+      {
+        "id": "implement",
+        "kind": "agent",
+        "title": "Implement project",
+        "description": "Execute the approved implementation with bounded authority.",
+        "position": {"x": 310, "y": 180},
+        "input_ports": [
+          {"id": "start", "label": "Start", "data_type": "control", "required": true}
+        ],
+        "output_ports": [
+          {"id": "next", "label": "Implemented", "data_type": "control"}
+        ],
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high",
+        "model": "codex",
+        "prompt_resource": "prompt.implement",
+        "agent_definition_resource": "agent.codex",
+        "tool_resources": ["tool.terminal"],
+        "write_scope": ["src/**", "tests/**", "docs/**"],
+        "acceptance_criteria": ["The requested behavior is implemented and locally verified"]
+      },
+      {
+        "id": "verify",
+        "kind": "operation",
+        "title": "Verify implementation",
+        "position": {"x": 580, "y": 180},
+        "input_ports": [
+          {"id": "start", "label": "Implementation", "data_type": "control", "required": true}
+        ],
+        "output_ports": [
+          {"id": "next", "label": "Verified", "data_type": "control"},
+          {"id": "evidence", "label": "Evidence", "data_type": "evidence"}
+        ],
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high",
+        "operation": "test",
+        "instruction_resource": "prompt.verify",
+        "resource_ids": ["tool.terminal"],
+        "acceptance_criteria": ["Every configured check passes with durable evidence"]
+      },
+      {
+        "id": "review",
+        "kind": "review",
+        "title": "Independent adversarial review",
+        "position": {"x": 850, "y": 180},
+        "input_ports": [
+          {"id": "work", "label": "Work", "data_type": "control", "required": true},
+          {"id": "evidence", "label": "Evidence", "data_type": "evidence", "required": true}
+        ],
+        "output_ports": [
+          {"id": "next", "label": "Passed", "data_type": "control"}
+        ],
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high",
+        "model": "chatgpt-5.6-sol-high",
+        "prompt_resource": "prompt.review",
+        "subject_resources": ["prompt.implement", "agent.codex"],
+        "required_evidence": ["Verification results", "Immutable Git commit"],
+        "independent": true,
+        "independent_from": ["implement"],
+        "remediation": {
+          "maximum_rounds": 5,
+          "repair_template_resource": "template.repair",
+          "exhaustion": "request-user-decision"
+        }
+      },
+      {
+        "id": "approve",
+        "kind": "gate",
+        "title": "User approval",
+        "position": {"x": 1120, "y": 180},
+        "input_ports": [
+          {"id": "reviewed", "label": "Reviewed", "data_type": "control", "required": true}
+        ],
+        "output_ports": [
+          {"id": "next", "label": "Approved", "data_type": "control"}
+        ],
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high",
+        "gate": "user-approval",
+        "criteria": ["The user affirms the reviewed workflow result"],
+        "required_evidence": ["Independent review pass"]
+      },
+      {
+        "id": "handoff",
+        "kind": "operation",
+        "title": "Verified handoff",
+        "position": {"x": 1390, "y": 180},
+        "input_ports": [
+          {"id": "approved", "label": "Approved", "data_type": "control", "required": true}
+        ],
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high",
+        "operation": "handoff",
+        "instruction_resource": "prompt.verify",
+        "acceptance_criteria": ["Verified execution artifacts are handed off"]
+      }
+    ],
+    "edges": [
+      {
+        "id": "intent-implement",
+        "source_node": "intent",
+        "source_port": "next",
+        "target_node": "implement",
+        "target_port": "start",
+        "data_type": "control"
+      },
+      {
+        "id": "implement-verify",
+        "source_node": "implement",
+        "source_port": "next",
+        "target_node": "verify",
+        "target_port": "start",
+        "data_type": "control"
+      },
+      {
+        "id": "verify-review",
+        "source_node": "verify",
+        "source_port": "next",
+        "target_node": "review",
+        "target_port": "work",
+        "data_type": "control"
+      },
+      {
+        "id": "evidence-review",
+        "source_node": "verify",
+        "source_port": "evidence",
+        "target_node": "review",
+        "target_port": "evidence",
+        "data_type": "evidence"
+      },
+      {
+        "id": "review-approve",
+        "source_node": "review",
+        "source_port": "next",
+        "target_node": "approve",
+        "target_port": "reviewed",
+        "data_type": "control"
+      },
+      {
+        "id": "approve-handoff",
+        "source_node": "approve",
+        "source_port": "next",
+        "target_node": "handoff",
+        "target_port": "approved",
+        "data_type": "control"
+      }
+    ],
+    "entry_nodes": ["intent"],
+    "completion_nodes": ["handoff"],
+    "policy": {
+      "maximum_parallel_nodes": 4,
+      "failure": "pause-for-user",
+      "deviation": "log-and-adapt"
+    }
+  }
+}

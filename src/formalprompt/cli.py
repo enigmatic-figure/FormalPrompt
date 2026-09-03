@@ -36,6 +36,7 @@ TEMPLATES = {
     "formalprompt-self-hosting": TEMPLATE_DIRECTORY / "formalprompt-self-hosting.json",
     "minimal": TEMPLATE_DIRECTORY / "minimal.json",
     "software-project": TEMPLATE_DIRECTORY / "software-project.json",
+    "workflow-project": TEMPLATE_DIRECTORY / "workflow-project.json",
 }
 
 

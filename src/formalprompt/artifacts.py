@@ -6,7 +6,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import uuid4
 
+from formalprompt.handoff_compiler import execution_brief, specification_markdown
 from formalprompt.integrity import document_sha256
+from formalprompt.models import CanvasDocument
+from formalprompt.workflow_compiler import compile_workflow_payloads
 
 
 class ArtifactBundleError(RuntimeError):
@@ -55,6 +58,7 @@ def _verify_bundle(
         raise ArtifactBundleError("Result, manifest, and approval revisions do not match")
     specification = _read_json(run_root / "artifacts" / "specification.json")
     try:
+        document_model = CanvasDocument.model_validate(document)
         current_document_digest = document_sha256(document)
         specification_digest = document_sha256(specification)
     except (TypeError, ValueError) as exc:
@@ -101,6 +105,20 @@ def _verify_bundle(
     }
     if actual_files != set(files):
         raise ArtifactBundleError("Artifact manifest does not exactly declare the compiled bundle")
+    artifact_paths, artifact_payloads, expected_files = _expected_payloads(document_model)
+    if document_model.workflow is not None:
+        expected_files.update({"workflow.json", "EXECUTION_CONTRACT.md"})
+    if set(files) != expected_files:
+        raise ArtifactBundleError(
+            "Artifact manifest membership does not match the approved document"
+        )
+    _verify_derived_payloads(
+        artifacts_root,
+        document_model,
+        digests[0],
+        artifact_paths,
+        artifact_payloads,
+    )
     if result.get("artifacts") != files:
         raise ArtifactBundleError("Run result artifact metadata does not match the manifest")
     handoff = result.get("handoff")
@@ -108,7 +126,75 @@ def _verify_bundle(
         raise ArtifactBundleError("Run result does not declare a valid handoff")
     if handoff.removeprefix("artifacts/") not in files:
         raise ArtifactBundleError("Run handoff is not declared by the artifact manifest")
+    workflow_path = result.get("workflow")
+    execution_contract = result.get("execution_contract")
+    has_workflow = document_model.workflow is not None
+    if has_workflow != (workflow_path is not None or execution_contract is not None):
+        raise ArtifactBundleError("Run workflow declaration does not match the approved document")
+    if has_workflow:
+        if workflow_path != "artifacts/workflow.json":
+            raise ArtifactBundleError("Run workflow path is not recognized")
+        if execution_contract != "artifacts/EXECUTION_CONTRACT.md":
+            raise ArtifactBundleError("Run execution contract path is not recognized")
+        if "workflow.json" not in files or "EXECUTION_CONTRACT.md" not in files:
+            raise ArtifactBundleError("Compiled workflow files are not declared by the manifest")
+        compiled_workflow = _read_json(artifacts_root / "workflow.json")
+        if compiled_workflow.get("contract") != "agent-workflow-compiled/v1":
+            raise ArtifactBundleError("Compiled workflow contract is not recognized")
+        if compiled_workflow.get("document_sha256") != digests[0]:
+            raise ArtifactBundleError("Compiled workflow document digest does not match approval")
+        if compiled_workflow.get("workflow") != document.get("workflow"):
+            raise ArtifactBundleError("Compiled workflow does not match the approved blueprint")
+        _verify_workflow_resources(compiled_workflow, files)
     return result, manifest
+
+
+def _expected_payloads(
+    document: CanvasDocument,
+) -> tuple[dict[str, str], dict[str, str], set[str]]:
+    artifact_paths: dict[str, str] = {}
+    artifact_payloads: dict[str, str] = {}
+    expected_files = {
+        "specification.json",
+        "SPECIFICATION.md",
+        "EXECUTION_BRIEF.md",
+        "approval.json",
+    }
+    for artifact in document.initialization.artifacts:
+        relative = f"initialization/{PurePosixPath(artifact.path).as_posix()}"
+        artifact_paths[artifact.id] = relative
+        artifact_payloads[relative] = (
+            artifact.content if artifact.content.endswith("\n") else artifact.content + "\n"
+        )
+        expected_files.add(relative)
+    return artifact_paths, artifact_payloads, expected_files
+
+
+def _verify_derived_payloads(
+    artifacts_root: Path,
+    document: CanvasDocument,
+    document_digest: str,
+    artifact_paths: dict[str, str],
+    artifact_payloads: dict[str, str],
+) -> None:
+    expected = {
+        "SPECIFICATION.md": specification_markdown(document),
+        "EXECUTION_BRIEF.md": execution_brief(document),
+        **artifact_payloads,
+    }
+    expected.update(
+        compile_workflow_payloads(
+            document,
+            document_digest=document_digest,
+            artifact_paths=artifact_paths,
+            artifact_payloads=artifact_payloads,
+        )
+    )
+    for relative, content in expected.items():
+        if _contained_path(artifacts_root, relative).read_text(encoding="utf-8") != content:
+            raise ArtifactBundleError(
+                f"Compiled artifact does not match the approved document: {relative}"
+            )
 
 
 def materialize_initialization(
@@ -200,3 +286,26 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ArtifactBundleError(f"Artifact metadata must be an object: {path}")
     return value
+
+
+def _verify_workflow_resources(
+    compiled_workflow: dict[str, Any], files: dict[str, dict[str, Any]]
+) -> None:
+    resources = compiled_workflow.get("resolved_resources")
+    if not isinstance(resources, dict):
+        raise ArtifactBundleError("Compiled workflow resource registry is invalid")
+    for resource_id, resolution in resources.items():
+        if not isinstance(resource_id, str) or not isinstance(resolution, dict):
+            raise ArtifactBundleError("Compiled workflow resource entry is invalid")
+        binding = resolution.get("binding")
+        if binding == "initialization-artifact":
+            path = resolution.get("path")
+            if not isinstance(path, str) or path not in files:
+                raise ArtifactBundleError(f"Workflow resource is not manifested: {resource_id}")
+            if resolution.get("sha256") != files[path].get("sha256"):
+                raise ArtifactBundleError(f"Workflow resource digest does not match: {resource_id}")
+        elif binding == "harness-capability":
+            if not resolution.get("capability") or not resolution.get("version"):
+                raise ArtifactBundleError(f"Workflow capability is not pinned: {resource_id}")
+        else:
+            raise ArtifactBundleError(f"Workflow resource binding is invalid: {resource_id}")

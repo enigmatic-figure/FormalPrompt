@@ -7,7 +7,16 @@ from typing import Any, Literal
 import re2
 from pydantic import BaseModel
 
-from formalprompt.models import CanvasDocument, CanvasField
+from formalprompt.models import (
+    AgentWorkflowNode,
+    ArtifactWorkflowNode,
+    CanvasDocument,
+    CanvasField,
+    InputWorkflowNode,
+    OperationWorkflowNode,
+    ReviewWorkflowNode,
+    WorkflowGraph,
+)
 
 RE2_OPTIONS = re2.Options()
 RE2_OPTIONS.log_errors = False
@@ -53,6 +62,8 @@ def validate_document(document: dict[str, Any] | CanvasDocument) -> list[Validat
                 seen_fields.add(field.id)
                 issues.extend(_validate_field(field))
     issues.extend(_validate_initialization(model))
+    if model.workflow is not None:
+        issues.extend(_validate_workflow(model))
     return issues
 
 
@@ -247,6 +258,423 @@ def _validate_initialization(document: CanvasDocument) -> list[ValidationIssue]:
             )
         )
     return issues
+
+
+def _validate_workflow(document: CanvasDocument) -> list[ValidationIssue]:
+    graph = document.workflow
+    assert graph is not None
+    issues: list[ValidationIssue] = []
+    resources = _unique_map(
+        [(resource.id, resource) for resource in graph.resources],
+        "duplicate-workflow-resource-id",
+        "workflow resource",
+        issues,
+    )
+    nodes = _unique_map(
+        [(node.id, node) for node in graph.nodes],
+        "duplicate-workflow-node-id",
+        "workflow node",
+        issues,
+    )
+    _unique_map(
+        [(edge.id, edge) for edge in graph.edges],
+        "duplicate-workflow-edge-id",
+        "workflow edge",
+        issues,
+    )
+    artifacts = {artifact.id: artifact for artifact in document.initialization.artifacts}
+    for resource in graph.resources:
+        if resource.binding == "initialization-artifact":
+            artifact = artifacts.get(resource.reference)
+            if artifact is None:
+                issues.append(
+                    _issue(
+                        "unknown-workflow-artifact",
+                        f"Workflow resource {resource.title} references an unknown "
+                        "initialization artifact",
+                        resource.id,
+                    )
+                )
+            elif not _artifact_resource_compatible(artifact.kind, resource.kind):
+                issues.append(
+                    _issue(
+                        "incompatible-workflow-artifact",
+                        f"Workflow resource {resource.title} declares kind {resource.kind} but "
+                        f"artifact {resource.reference} has kind {artifact.kind}",
+                        resource.id,
+                    )
+                )
+        elif not resource.version:
+            issues.append(
+                _issue(
+                    "unpinned-workflow-capability",
+                    f"Harness capability {resource.title} requires a version",
+                    resource.id,
+                )
+            )
+
+    incoming: dict[str, list] = {node_id: [] for node_id in nodes}
+    outgoing: dict[str, list] = {node_id: [] for node_id in nodes}
+    input_ports: dict[str, dict] = {}
+    output_ports: dict[str, dict] = {}
+    for node in graph.nodes:
+        input_ports[node.id] = _port_map(node.id, "input", node.input_ports, issues)
+        output_ports[node.id] = _port_map(node.id, "output", node.output_ports, issues)
+        if node.provenance == "unresolved" or node.review_status in {
+            "needs-input",
+            "conflict",
+            "rejected",
+        }:
+            issues.append(
+                _issue(
+                    "unresolved-workflow-node",
+                    f"Workflow node {node.title} must be resolved before approval",
+                    node.id,
+                )
+            )
+        issues.extend(_validate_node_resources(node, resources))
+        if isinstance(node, AgentWorkflowNode):
+            for scope in node.write_scope:
+                if not _safe_scope(scope):
+                    issues.append(
+                        _issue(
+                            "unsafe-agent-write-scope",
+                            f"Agent node {node.title} has unsafe write scope: {scope}",
+                            node.id,
+                        )
+                    )
+
+    for edge in graph.edges:
+        source = nodes.get(edge.source_node)
+        target = nodes.get(edge.target_node)
+        if source is None:
+            issues.append(
+                _issue(
+                    "unknown-edge-source",
+                    f"Workflow edge {edge.id} has an unknown source node",
+                    edge.id,
+                )
+            )
+        if target is None:
+            issues.append(
+                _issue(
+                    "unknown-edge-target",
+                    f"Workflow edge {edge.id} has an unknown target node",
+                    edge.id,
+                )
+            )
+        source_port = output_ports.get(edge.source_node, {}).get(edge.source_port)
+        target_port = input_ports.get(edge.target_node, {}).get(edge.target_port)
+        if source is not None and source_port is None:
+            issues.append(
+                _issue(
+                    "unknown-edge-source-port",
+                    f"Workflow edge {edge.id} has an unknown source port",
+                    edge.id,
+                )
+            )
+        if target is not None and target_port is None:
+            issues.append(
+                _issue(
+                    "unknown-edge-target-port",
+                    f"Workflow edge {edge.id} has an unknown target port",
+                    edge.id,
+                )
+            )
+        if source_port is not None and source_port.data_type != edge.data_type:
+            issues.append(
+                _issue(
+                    "edge-source-type-mismatch",
+                    f"Workflow edge {edge.id} does not match its source port type",
+                    edge.id,
+                )
+            )
+        if target_port is not None and target_port.data_type != edge.data_type:
+            issues.append(
+                _issue(
+                    "edge-target-type-mismatch",
+                    f"Workflow edge {edge.id} does not match its target port type",
+                    edge.id,
+                )
+            )
+        if source is not None and target is not None:
+            outgoing[source.id].append(edge)
+            incoming[target.id].append(edge)
+
+    issues.extend(_validate_required_ports(graph, incoming))
+    issues.extend(_validate_graph_paths(graph, nodes, incoming, outgoing))
+    issues.extend(_validate_review_independence(graph, nodes, incoming))
+    issues.extend(_validate_parallel_write_scopes(graph, outgoing))
+    return issues
+
+
+def _unique_map(items, code: str, label: str, issues: list[ValidationIssue]) -> dict:
+    result = {}
+    for identifier, value in items:
+        if identifier in result:
+            issues.append(_issue(code, f"Duplicate {label} ID: {identifier}", identifier))
+        result[identifier] = value
+    return result
+
+
+def _port_map(node_id: str, direction: str, ports: list, issues: list[ValidationIssue]) -> dict:
+    result = {}
+    for port in ports:
+        if port.id in result:
+            issues.append(
+                _issue(
+                    "duplicate-workflow-port-id",
+                    f"Workflow node {node_id} has duplicate {direction} port {port.id}",
+                    node_id,
+                )
+            )
+        result[port.id] = port
+    return result
+
+
+def _validate_node_resources(node, resources: dict) -> list[ValidationIssue]:
+    references: list[tuple[str, set[str] | None]] = []
+    if isinstance(node, InputWorkflowNode):
+        references.extend((reference, None) for reference in node.resource_ids)
+    elif isinstance(node, ArtifactWorkflowNode):
+        references.append((node.resource_id, None))
+    elif isinstance(node, AgentWorkflowNode):
+        references.append((node.prompt_resource, {"prompt"}))
+        if node.agent_definition_resource:
+            references.append((node.agent_definition_resource, {"agent-definition"}))
+        references.extend((reference, None) for reference in node.context_resources)
+        references.extend((reference, {"skill"}) for reference in node.skill_resources)
+        references.extend((reference, {"tool"}) for reference in node.tool_resources)
+    elif isinstance(node, OperationWorkflowNode):
+        references.append((node.instruction_resource, {"prompt", "policy", "template"}))
+        references.extend((reference, None) for reference in node.resource_ids)
+    elif isinstance(node, ReviewWorkflowNode):
+        references.append((node.prompt_resource, {"prompt"}))
+        references.append((node.remediation.repair_template_resource, {"template", "prompt"}))
+        references.extend((reference, None) for reference in node.subject_resources)
+
+    issues: list[ValidationIssue] = []
+    for reference, allowed_kinds in references:
+        resource = resources.get(reference)
+        if resource is None:
+            issues.append(
+                _issue(
+                    "unknown-node-resource",
+                    f"Workflow node {node.title} references unknown resource {reference}",
+                    node.id,
+                )
+            )
+        elif allowed_kinds is not None and resource.kind not in allowed_kinds:
+            issues.append(
+                _issue(
+                    "incompatible-node-resource",
+                    f"Workflow node {node.title} cannot use {resource.kind} "
+                    f"resource {reference} here",
+                    node.id,
+                )
+            )
+    return issues
+
+
+def _artifact_resource_compatible(artifact_kind: str, resource_kind: str) -> bool:
+    compatible = {
+        "primary-prompt": {"prompt"},
+        "agent-definition": {"agent-definition"},
+        "skill": {"skill"},
+        "research-request": {"prompt", "knowledge"},
+        "knowledge-base-plan": {"knowledge"},
+        "project-plan": {"prompt", "policy"},
+        "tool-definition": {"tool"},
+        "workflow-template": {"template"},
+        "execution-policy": {"policy"},
+        "report-template": {"report-template", "template"},
+        "other": set(),
+    }
+    return resource_kind in compatible[artifact_kind]
+
+
+def _validate_required_ports(
+    graph: WorkflowGraph, incoming: dict[str, list]
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    for node in graph.nodes:
+        for port in node.input_ports:
+            count = sum(edge.target_port == port.id for edge in incoming[node.id])
+            if port.required and count == 0:
+                issues.append(
+                    _issue(
+                        "required-workflow-input-missing",
+                        f"Workflow node {node.title} requires input port {port.label}",
+                        node.id,
+                    )
+                )
+            if not port.multiple and count > 1:
+                issues.append(
+                    _issue(
+                        "workflow-input-cardinality",
+                        f"Workflow node {node.title} input {port.label} accepts only one edge",
+                        node.id,
+                    )
+                )
+    return issues
+
+
+def _validate_graph_paths(
+    graph, nodes: dict, incoming: dict, outgoing: dict
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    entries = set(graph.entry_nodes)
+    completions = set(graph.completion_nodes)
+    for node_id in entries:
+        if node_id not in nodes:
+            issues.append(_issue("unknown-entry-node", f"Unknown workflow entry node: {node_id}"))
+        elif incoming[node_id]:
+            issues.append(
+                _issue("entry-node-has-input", f"Workflow entry node {node_id} has incoming edges")
+            )
+    for node_id in completions:
+        if node_id not in nodes:
+            issues.append(
+                _issue("unknown-completion-node", f"Unknown workflow completion node: {node_id}")
+            )
+        elif outgoing[node_id]:
+            issues.append(
+                _issue(
+                    "completion-node-has-output",
+                    f"Workflow completion node {node_id} has outgoing edges",
+                )
+            )
+
+    indegree = {node_id: len(incoming[node_id]) for node_id in nodes}
+    queue = [node_id for node_id, degree in indegree.items() if degree == 0]
+    visited: list[str] = []
+    while queue:
+        node_id = queue.pop()
+        visited.append(node_id)
+        for edge in outgoing[node_id]:
+            indegree[edge.target_node] -= 1
+            if indegree[edge.target_node] == 0:
+                queue.append(edge.target_node)
+    if len(visited) != len(nodes):
+        issues.append(_issue("workflow-cycle", "Workflow graph must be acyclic"))
+        return issues
+
+    reachable = _reachable(entries & nodes.keys(), outgoing, forward=True)
+    for node_id in nodes.keys() - reachable:
+        issues.append(
+            _issue(
+                "workflow-node-unreachable",
+                f"Workflow node {node_id} is not reachable from a declared entry",
+                node_id,
+            )
+        )
+    reaches_completion = _reachable(completions & nodes.keys(), incoming, forward=False)
+    for node_id in nodes.keys() - reaches_completion:
+        issues.append(
+            _issue(
+                "workflow-node-no-completion-path",
+                f"Workflow node {node_id} cannot reach a declared completion",
+                node_id,
+            )
+        )
+    return issues
+
+
+def _reachable(starts, adjacency: dict, *, forward: bool) -> set[str]:
+    found = set(starts)
+    pending = list(starts)
+    while pending:
+        node_id = pending.pop()
+        for edge in adjacency[node_id]:
+            neighbor = edge.target_node if forward else edge.source_node
+            if neighbor not in found:
+                found.add(neighbor)
+                pending.append(neighbor)
+    return found
+
+
+def _validate_review_independence(
+    graph: WorkflowGraph, nodes: dict, incoming: dict
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    for node in graph.nodes:
+        if not isinstance(node, ReviewWorkflowNode):
+            continue
+        declared = set(node.independent_from)
+        for agent_id in declared:
+            if not isinstance(nodes.get(agent_id), AgentWorkflowNode):
+                issues.append(
+                    _issue(
+                        "invalid-review-independence-reference",
+                        f"Review node {node.title} declares non-agent {agent_id} as an "
+                        "independence subject",
+                        node.id,
+                    )
+                )
+        ancestors = _reachable({node.id}, incoming, forward=False) - {node.id}
+        upstream_agents = {
+            node_id for node_id in ancestors if isinstance(nodes[node_id], AgentWorkflowNode)
+        }
+        missing = sorted(upstream_agents - declared)
+        if missing:
+            issues.append(
+                _issue(
+                    "review-independence-incomplete",
+                    f"Review node {node.title} must declare independence from upstream agents: "
+                    f"{', '.join(missing)}",
+                    node.id,
+                )
+            )
+    return issues
+
+
+def _validate_parallel_write_scopes(graph: WorkflowGraph, outgoing: dict) -> list[ValidationIssue]:
+    agents = [node for node in graph.nodes if isinstance(node, AgentWorkflowNode)]
+    descendants = {
+        node.id: _reachable({node.id}, outgoing, forward=True) - {node.id} for node in agents
+    }
+    issues: list[ValidationIssue] = []
+    for index, left in enumerate(agents):
+        for right in agents[index + 1 :]:
+            ordered = right.id in descendants[left.id] or left.id in descendants[right.id]
+            if not ordered and any(
+                _scopes_overlap(left_scope, right_scope)
+                for left_scope in left.write_scope
+                for right_scope in right.write_scope
+            ):
+                issues.append(
+                    _issue(
+                        "overlapping-parallel-write-scope",
+                        f"Parallel agent nodes {left.title} and {right.title} "
+                        "have overlapping write scope",
+                    )
+                )
+    return issues
+
+
+def _safe_scope(scope: str) -> bool:
+    path = PurePosixPath(scope)
+    return bool(scope) and not (
+        "\\" in scope
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or any(part.casefold() in {".git", ".formalprompt"} for part in path.parts)
+    )
+
+
+def _scopes_overlap(left: str, right: str) -> bool:
+    def prefix(value: str) -> str:
+        return value.split("*", 1)[0].rstrip("/").casefold()
+
+    left_prefix = prefix(left)
+    right_prefix = prefix(right)
+    if not left_prefix or not right_prefix:
+        return True
+    return (
+        left_prefix == right_prefix
+        or left_prefix.startswith(right_prefix + "/")
+        or right_prefix.startswith(left_prefix + "/")
+    )
 
 
 def _issue(code: str, message: str, field_id: str | None = None) -> ValidationIssue:

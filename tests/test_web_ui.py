@@ -34,6 +34,9 @@ def test_browser_shell_is_packaged_and_hardened(tmp_path):
     assert "Apply suggestion" in script.text
     assert "Apply proposed canvas" in script.text
     assert "Compose initialization" in script.text
+    assert "Arrange DAG" in script.text
+    assert "Connect compatible ports" in script.text
+    assert 'api("/api/workflow"' in script.text
 
 
 def test_validation_endpoint_returns_current_issues(tmp_path):

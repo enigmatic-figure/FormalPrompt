@@ -1,5 +1,282 @@
 {
   "$defs": {
+    "AgentWorkflowNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/GraphPosition"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Input Ports",
+          "type": "array"
+        },
+        "output_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Output Ports",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "proposed",
+            "user-confirmed",
+            "unresolved"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "review_status": {
+          "enum": [
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "needs-input",
+            "conflict"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        },
+        "importance": {
+          "default": "normal",
+          "enum": [
+            "blocker",
+            "high",
+            "normal",
+            "low"
+          ],
+          "title": "Importance",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "kind": {
+          "const": "agent",
+          "title": "Kind",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_resource": {
+          "title": "Prompt Resource",
+          "type": "string"
+        },
+        "agent_definition_resource": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Definition Resource"
+        },
+        "context_resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Context Resources",
+          "type": "array"
+        },
+        "skill_resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skill Resources",
+          "type": "array"
+        },
+        "tool_resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tool Resources",
+          "type": "array"
+        },
+        "write_scope": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Write Scope",
+          "type": "array"
+        },
+        "acceptance_criteria": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Acceptance Criteria",
+          "type": "array"
+        },
+        "timeout_seconds": {
+          "default": 3600,
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Timeout Seconds",
+          "type": "integer"
+        },
+        "token_budget": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Budget"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "position",
+        "provenance",
+        "review_status",
+        "kind",
+        "model",
+        "prompt_resource",
+        "acceptance_criteria"
+      ],
+      "title": "AgentWorkflowNode",
+      "type": "object"
+    },
+    "ArtifactWorkflowNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/GraphPosition"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Input Ports",
+          "type": "array"
+        },
+        "output_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Output Ports",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "proposed",
+            "user-confirmed",
+            "unresolved"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "review_status": {
+          "enum": [
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "needs-input",
+            "conflict"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        },
+        "importance": {
+          "default": "normal",
+          "enum": [
+            "blocker",
+            "high",
+            "normal",
+            "low"
+          ],
+          "title": "Importance",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "kind": {
+          "const": "artifact",
+          "title": "Kind",
+          "type": "string"
+        },
+        "resource_id": {
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "mode": {
+          "default": "read",
+          "enum": [
+            "read",
+            "produce",
+            "transform"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "position",
+        "provenance",
+        "review_status",
+        "kind",
+        "resource_id"
+      ],
+      "title": "ArtifactWorkflowNode",
+      "type": "object"
+    },
     "Assistance": {
       "additionalProperties": false,
       "properties": {
@@ -227,6 +504,146 @@
       "title": "FieldValidation",
       "type": "object"
     },
+    "GateWorkflowNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/GraphPosition"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Input Ports",
+          "type": "array"
+        },
+        "output_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Output Ports",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "proposed",
+            "user-confirmed",
+            "unresolved"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "review_status": {
+          "enum": [
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "needs-input",
+            "conflict"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        },
+        "importance": {
+          "default": "normal",
+          "enum": [
+            "blocker",
+            "high",
+            "normal",
+            "low"
+          ],
+          "title": "Importance",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "kind": {
+          "const": "gate",
+          "title": "Kind",
+          "type": "string"
+        },
+        "gate": {
+          "enum": [
+            "user-approval",
+            "verification",
+            "policy"
+          ],
+          "title": "Gate",
+          "type": "string"
+        },
+        "criteria": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "required_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "position",
+        "provenance",
+        "review_status",
+        "kind",
+        "gate",
+        "criteria"
+      ],
+      "title": "GateWorkflowNode",
+      "type": "object"
+    },
+    "GraphPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "GraphPosition",
+      "type": "object"
+    },
     "InitializationArtifact": {
       "additionalProperties": false,
       "properties": {
@@ -249,6 +666,10 @@
             "research-request",
             "knowledge-base-plan",
             "project-plan",
+            "tool-definition",
+            "workflow-template",
+            "execution-policy",
+            "report-template",
             "other"
           ],
           "title": "Kind",
@@ -345,6 +766,204 @@
       "title": "InitializationPlan",
       "type": "object"
     },
+    "InputWorkflowNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/GraphPosition"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Input Ports",
+          "type": "array"
+        },
+        "output_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Output Ports",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "proposed",
+            "user-confirmed",
+            "unresolved"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "review_status": {
+          "enum": [
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "needs-input",
+            "conflict"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        },
+        "importance": {
+          "default": "normal",
+          "enum": [
+            "blocker",
+            "high",
+            "normal",
+            "low"
+          ],
+          "title": "Importance",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "kind": {
+          "const": "input",
+          "title": "Kind",
+          "type": "string"
+        },
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Resource Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "position",
+        "provenance",
+        "review_status",
+        "kind"
+      ],
+      "title": "InputWorkflowNode",
+      "type": "object"
+    },
+    "JoinWorkflowNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/GraphPosition"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Input Ports",
+          "type": "array"
+        },
+        "output_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Output Ports",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "proposed",
+            "user-confirmed",
+            "unresolved"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "review_status": {
+          "enum": [
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "needs-input",
+            "conflict"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        },
+        "importance": {
+          "default": "normal",
+          "enum": [
+            "blocker",
+            "high",
+            "normal",
+            "low"
+          ],
+          "title": "Importance",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "kind": {
+          "const": "join",
+          "title": "Kind",
+          "type": "string"
+        },
+        "strategy": {
+          "default": "all",
+          "enum": [
+            "all",
+            "any"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "position",
+        "provenance",
+        "review_status",
+        "kind"
+      ],
+      "title": "JoinWorkflowNode",
+      "type": "object"
+    },
     "Metadata": {
       "additionalProperties": false,
       "properties": {
@@ -371,6 +990,131 @@
       "title": "Metadata",
       "type": "object"
     },
+    "OperationWorkflowNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/GraphPosition"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Input Ports",
+          "type": "array"
+        },
+        "output_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Output Ports",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "proposed",
+            "user-confirmed",
+            "unresolved"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "review_status": {
+          "enum": [
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "needs-input",
+            "conflict"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        },
+        "importance": {
+          "default": "normal",
+          "enum": [
+            "blocker",
+            "high",
+            "normal",
+            "low"
+          ],
+          "title": "Importance",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "kind": {
+          "const": "operation",
+          "title": "Kind",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "research",
+            "test",
+            "report",
+            "materialize",
+            "checkpoint",
+            "handoff"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "instruction_resource": {
+          "title": "Instruction Resource",
+          "type": "string"
+        },
+        "resource_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Resource Ids",
+          "type": "array"
+        },
+        "acceptance_criteria": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Acceptance Criteria",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "position",
+        "provenance",
+        "review_status",
+        "kind",
+        "operation",
+        "instruction_resource",
+        "acceptance_criteria"
+      ],
+      "title": "OperationWorkflowNode",
+      "type": "object"
+    },
     "Option": {
       "additionalProperties": false,
       "properties": {
@@ -393,6 +1137,171 @@
         "label"
       ],
       "title": "Option",
+      "type": "object"
+    },
+    "RemediationPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_rounds": {
+          "default": 3,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Maximum Rounds",
+          "type": "integer"
+        },
+        "repair_template_resource": {
+          "title": "Repair Template Resource",
+          "type": "string"
+        },
+        "exhaustion": {
+          "default": "block",
+          "enum": [
+            "block",
+            "request-user-decision"
+          ],
+          "title": "Exhaustion",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repair_template_resource"
+      ],
+      "title": "RemediationPolicy",
+      "type": "object"
+    },
+    "ReviewWorkflowNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/GraphPosition"
+        },
+        "input_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Input Ports",
+          "type": "array"
+        },
+        "output_ports": {
+          "items": {
+            "$ref": "#/$defs/WorkflowPort"
+          },
+          "title": "Output Ports",
+          "type": "array"
+        },
+        "provenance": {
+          "enum": [
+            "explicit",
+            "inferred",
+            "proposed",
+            "user-confirmed",
+            "unresolved"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "review_status": {
+          "enum": [
+            "unreviewed",
+            "accepted",
+            "rejected",
+            "needs-input",
+            "conflict"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        },
+        "importance": {
+          "default": "normal",
+          "enum": [
+            "blocker",
+            "high",
+            "normal",
+            "low"
+          ],
+          "title": "Importance",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "kind": {
+          "const": "review",
+          "title": "Kind",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_resource": {
+          "title": "Prompt Resource",
+          "type": "string"
+        },
+        "subject_resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Subject Resources",
+          "type": "array"
+        },
+        "required_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Required Evidence",
+          "type": "array"
+        },
+        "independent": {
+          "const": true,
+          "default": true,
+          "title": "Independent",
+          "type": "boolean"
+        },
+        "independent_from": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Independent From",
+          "type": "array"
+        },
+        "remediation": {
+          "$ref": "#/$defs/RemediationPolicy"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "position",
+        "provenance",
+        "review_status",
+        "kind",
+        "model",
+        "prompt_resource",
+        "required_evidence",
+        "remediation"
+      ],
+      "title": "ReviewWorkflowNode",
       "type": "object"
     },
     "Section": {
@@ -464,6 +1373,306 @@
       ],
       "title": "Tab",
       "type": "object"
+    },
+    "WorkflowEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_node": {
+          "title": "Source Node",
+          "type": "string"
+        },
+        "source_port": {
+          "title": "Source Port",
+          "type": "string"
+        },
+        "target_node": {
+          "title": "Target Node",
+          "type": "string"
+        },
+        "target_port": {
+          "title": "Target Port",
+          "type": "string"
+        },
+        "data_type": {
+          "enum": [
+            "control",
+            "context",
+            "artifact",
+            "evidence"
+          ],
+          "title": "Data Type",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_node",
+        "source_port",
+        "target_node",
+        "target_port",
+        "data_type"
+      ],
+      "title": "WorkflowEdge",
+      "type": "object"
+    },
+    "WorkflowGraph": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "agent-workflow/v1",
+          "title": "Protocol",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/WorkflowResource"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent": "#/$defs/AgentWorkflowNode",
+                "artifact": "#/$defs/ArtifactWorkflowNode",
+                "gate": "#/$defs/GateWorkflowNode",
+                "input": "#/$defs/InputWorkflowNode",
+                "join": "#/$defs/JoinWorkflowNode",
+                "operation": "#/$defs/OperationWorkflowNode",
+                "review": "#/$defs/ReviewWorkflowNode"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/InputWorkflowNode"
+              },
+              {
+                "$ref": "#/$defs/ArtifactWorkflowNode"
+              },
+              {
+                "$ref": "#/$defs/AgentWorkflowNode"
+              },
+              {
+                "$ref": "#/$defs/OperationWorkflowNode"
+              },
+              {
+                "$ref": "#/$defs/ReviewWorkflowNode"
+              },
+              {
+                "$ref": "#/$defs/GateWorkflowNode"
+              },
+              {
+                "$ref": "#/$defs/JoinWorkflowNode"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/WorkflowEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "entry_nodes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Entry Nodes",
+          "type": "array"
+        },
+        "completion_nodes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Completion Nodes",
+          "type": "array"
+        },
+        "policy": {
+          "$ref": "#/$defs/WorkflowPolicy"
+        }
+      },
+      "required": [
+        "protocol",
+        "title",
+        "nodes",
+        "entry_nodes",
+        "completion_nodes"
+      ],
+      "title": "WorkflowGraph",
+      "type": "object"
+    },
+    "WorkflowPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_parallel_nodes": {
+          "default": 4,
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Maximum Parallel Nodes",
+          "type": "integer"
+        },
+        "failure": {
+          "default": "halt",
+          "enum": [
+            "halt",
+            "pause-for-user"
+          ],
+          "title": "Failure",
+          "type": "string"
+        },
+        "deviation": {
+          "default": "log-and-adapt",
+          "enum": [
+            "log-and-adapt",
+            "require-user-approval"
+          ],
+          "title": "Deviation",
+          "type": "string"
+        }
+      },
+      "title": "WorkflowPolicy",
+      "type": "object"
+    },
+    "WorkflowPort": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "data_type": {
+          "enum": [
+            "control",
+            "context",
+            "artifact",
+            "evidence"
+          ],
+          "title": "Data Type",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "multiple": {
+          "default": false,
+          "title": "Multiple",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "data_type"
+      ],
+      "title": "WorkflowPort",
+      "type": "object"
+    },
+    "WorkflowResource": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "prompt",
+            "agent-definition",
+            "skill",
+            "tool",
+            "template",
+            "knowledge",
+            "policy",
+            "report-template"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "binding": {
+          "enum": [
+            "initialization-artifact",
+            "harness-capability"
+          ],
+          "title": "Binding",
+          "type": "string"
+        },
+        "reference": {
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "binding",
+        "reference"
+      ],
+      "title": "WorkflowResource",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -494,6 +1703,17 @@
     },
     "initialization": {
       "$ref": "#/$defs/InitializationPlan"
+    },
+    "workflow": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorkflowGraph"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

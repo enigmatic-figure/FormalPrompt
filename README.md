@@ -21,6 +21,9 @@ The canonical state is the canvas document. The browser, facilitator, reviewer, 
 - Staged Markdown/JSON handoffs with SHA-256 manifest and machine-readable result.
 - Typed, editable initialization artifacts for primary prompts, agent definitions, skills,
   research requests, knowledge-base plans, and project plans.
+- A typed, manipulable agent-workflow DAG with seven node kinds, typed ports, resource bindings,
+  authority scopes, review policies, semantic validation, and a browser node inspector.
+- Digest-bound workflow compilation with pinned resources and a compact Codex execution contract.
 - Authenticated loopback FastAPI server with restrictive browser security headers.
 - Graphical-browser, Carbonyl, automatic, and URL-only launch modes.
 - Field assistance plus facilitator and adversarial whole-spec review.
@@ -30,7 +33,7 @@ The canonical state is the canvas document. The browser, facilitator, reviewer, 
 - A concrete ephemeral Muse runner adapter with schema-constrained responses.
 - Separate facilitator/composer and independent-reviewer command routes.
 - Optional revision-bound independent-review gating before user approval.
-- Three agent skills and three starting templates, including a self-hosting canvas.
+- Six agent skills and four starting templates, including graph-backed and self-hosting canvases.
 - Real headless-Chrome integration coverage for edit → validate → approve → compile.
 
 ## Install for development
@@ -53,10 +56,11 @@ Carbonyl is optional and installed separately. See `docs/browser-renderers.md` f
 
 ## Quick start
 
-Create a canvas document:
+Create a canvas document (use `workflow-project` for a graph-backed project):
 
 ```text
 uv run formalprompt template software-project canvas.json
+uv run formalprompt template workflow-project workflow-canvas.json
 ```
 
 Edit the generated values and provenance, then validate it:
@@ -137,7 +141,7 @@ uv run formalprompt open canvas.json \
 
 ```text
 formalprompt validate <document> [--json]
-formalprompt template <minimal|software-project|formalprompt-self-hosting> <output>
+formalprompt template <minimal|software-project|workflow-project|formalprompt-self-hosting> <output>
 formalprompt schema <output>
 formalprompt open <document> [--renderer ...] [--assistant-command ...] [--reviewer-command ...]
 formalprompt resume <run-directory> [--renderer ...] [--assistant-command ...] [--reviewer-command ...]
@@ -163,6 +167,8 @@ formalprompt retrospective [project-directory] [--baseline ...]
     specification.json
     SPECIFICATION.md
     EXECUTION_BRIEF.md
+    EXECUTION_CONTRACT.md
+    workflow.json
     approval.json
     manifest.json
     initialization/
@@ -180,6 +186,9 @@ skills, prompts, or project files is an intentionally separate operation.
 - `skills/formalprompt-handoff/SKILL.md` — consume compact results without importing deliberation.
 - `skills/formalprompt-initialization-lifecycle/SKILL.md` — preserve True Initialization, record
   corrections, and compare completion with the reviewed baseline.
+- `skills/agent-workflow-authoring/SKILL.md` — compose typed resource-backed project DAGs.
+- `skills/agent-workflow-execution/SKILL.md` — execute a verified DAG without importing
+  initialization deliberation or silently rewriting intent.
 - `schemas/agent-canvas-v1.schema.json` — generated protocol schema.
 - `examples/formalprompt-project.json` — this project expressed in its own canvas.
 
@@ -222,6 +231,7 @@ The Chrome integration test runs automatically when Chrome-family browser and No
 - The core exposes the ephemeral composer/reviewer process boundaries but does not hard-code a particular
   Muse or ChatGPT transport; adapters own provider authentication, process lifecycle, and model selection.
 
-See `docs/protocol.md`, `docs/architecture.md`, `docs/browser-renderers.md`, and `docs/assistant-adapters.md` for normative details.
+See `docs/protocol.md`, `docs/workflow-protocol.md`, `docs/architecture.md`,
+`docs/browser-renderers.md`, and `docs/assistant-adapters.md` for normative details.
 See `docs/initialization-lifecycle.md` for private review publication, checkpointing, and the
 post-execution learning loop.

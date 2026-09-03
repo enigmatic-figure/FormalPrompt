@@ -20,6 +20,11 @@ The broker binds to loopback by default and owns one run. It serves static UI as
 
 One semantic web application supports graphical Chromium-family browsers and Carbonyl. It uses keyboard-operable tabs, native controls, visible text labels, non-color provenance markers, and responsive layouts. Agent documents cannot inject JavaScript. A future freeform presentation canvas must run in a separate sandbox.
 
+When a document contains an `agent-workflow/v1` blueprint, the renderer adds a scrollable node
+graph and inspector. Node position is presentation state; node declarations, typed ports, edges,
+resources, and policies remain canonical data and every graph edit uses the normal revision and
+approval-invalidation path.
+
 ### Command-agent bridge
 
 Optional assistants are subprocesses with a JSON-in/JSON-out contract. Requests contain only the scoped field or review bundle. Responses are recorded as suggestions and never become user decisions automatically. Provider-specific adapters belong outside the core protocol.
@@ -33,6 +38,11 @@ complete `next_document`, containing either another clarification form or a stag
 package. The proposal remains outside canonical state until the user applies it against the exact
 revision for which it was generated.
 
+For a ready long-horizon initialization, the composer also emits an acyclic workflow graph. It
+references staged artifacts and pinned harness capabilities instead of embedding executable
+content. An independent critic reviews the complete proposed state through the existing distinct
+command route.
+
 ### Compiler
 
 Compilation is deterministic and permitted only after structural validation, semantic readiness,
@@ -42,6 +52,11 @@ directory, then publishes the result before making the run terminal. Resume and 
 finalize a complete interrupted transaction or discard its partial bundle and restore `approved`.
 A resume that reaches `compiled` emits the verified completion directly without reopening a canvas.
 Compilation never modifies the caller's project automatically.
+
+A graph-backed compilation additionally emits `workflow.json` and
+`EXECUTION_CONTRACT.md`. The verifier deterministically re-derives compiled Markdown,
+initialization payloads, graph resources, and the execution contract from the approved document;
+changing a derived file and merely updating the mutable manifest is therefore rejected.
 
 ## Run layout
 
@@ -57,6 +72,8 @@ Compilation never modifies the caller's project automatically.
     specification.json
     SPECIFICATION.md
     EXECUTION_BRIEF.md
+    EXECUTION_CONTRACT.md
+    workflow.json
     approval.json
     manifest.json
     initialization/
@@ -113,3 +130,7 @@ Facilitator transcripts, review deliberation, browser events, and intermediate r
 the run directory and external agent processes. A handoff contains the final execution brief,
 artifact manifest, unresolved-item count, approval revision, approved document digest, and
 paths—not the full transcript.
+
+The approved workflow and runtime evidence are separate planes. Execution may record forward-only
+repair attempts and physical deviations, but it must never rewrite the approved graph to make
+history appear planned.

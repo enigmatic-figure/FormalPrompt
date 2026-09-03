@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from formalprompt.assistant import AssistantBackend, AssistantResponse
 from formalprompt.integrity import document_sha256
-from formalprompt.models import CanvasDocument
+from formalprompt.models import CanvasDocument, WorkflowGraph
 from formalprompt.validation import (
     ValidationIssue,
     independent_review_issue,
@@ -184,6 +184,59 @@ class RunStore:
                 "user",
                 artifact_id,
                 {"content_changed": True, "provenance": "user-confirmed"},
+            )
+            return self.session_payload()
+
+    def update_workflow(
+        self,
+        workflow: dict[str, Any] | WorkflowGraph,
+        expected_revision: int,
+        *,
+        confirmed_node_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            state = self.read_state()
+            self._ensure_editable(state)
+            if state["revision"] != expected_revision:
+                raise RevisionConflict(
+                    f"Expected revision {expected_revision}, "
+                    f"current revision is {state['revision']}"
+                )
+            candidate = (
+                workflow
+                if isinstance(workflow, WorkflowGraph)
+                else WorkflowGraph.model_validate(workflow)
+            ).model_copy(deep=True)
+            document = self.read_document()
+            confirmed = set(confirmed_node_ids or [])
+            node_ids = {node.id for node in candidate.nodes}
+            unknown_confirmations = confirmed - node_ids
+            if unknown_confirmations:
+                raise ValueError(
+                    "Cannot confirm unknown workflow nodes: "
+                    + ", ".join(sorted(unknown_confirmations))
+                )
+            for node in candidate.nodes:
+                if node.id in confirmed:
+                    node.provenance = "user-confirmed"
+                    node.review_status = "accepted"
+            document.workflow = candidate
+            state["revision"] += 1
+            state["status"] = "user-editing"
+            state["updated_at"] = _now()
+            state["approval"] = None
+            state["independent_review"] = None
+            self._write_json("document.json", document.model_dump(mode="json"))
+            self._write_json("state.json", state)
+            self.append_event(
+                "workflow.updated",
+                "user",
+                None,
+                {
+                    "node_count": len(candidate.nodes),
+                    "edge_count": len(candidate.edges),
+                    "confirmed_node_ids": sorted(confirmed),
+                },
             )
             return self.session_payload()
 

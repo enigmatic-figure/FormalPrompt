@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from formalprompt.assistant import AssistantBackend, AssistantProtocolError
 from formalprompt.compiler import ApprovalRequired, compile_run
+from formalprompt.models import WorkflowGraph
 from formalprompt.store import RevisionConflict, RunStore, ValidationFailed
 
 STATIC_DIRECTORY = Path(__file__).parent / "static"
@@ -24,6 +25,12 @@ class FieldUpdate(BaseModel):
 class ArtifactUpdate(BaseModel):
     content: str
     expected_revision: int = Field(ge=0)
+
+
+class WorkflowUpdate(BaseModel):
+    workflow: WorkflowGraph
+    expected_revision: int = Field(ge=0)
+    confirmed_node_ids: list[str] = Field(default_factory=list)
 
 
 class ApprovalRequest(BaseModel):
@@ -122,6 +129,21 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Unknown artifact"
             ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+            ) from exc
+
+    @app.put("/api/workflow", dependencies=[Depends(authorize)])
+    def update_workflow(update: WorkflowUpdate) -> dict:
+        try:
+            return store.update_workflow(
+                update.workflow,
+                update.expected_revision,
+                confirmed_node_ids=update.confirmed_node_ids,
+            )
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)

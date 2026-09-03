@@ -1,0 +1,82 @@
+# Agent Workflow Protocol
+
+FormalPrompt's agent-workflow/v1 object is the user-editable execution blueprint inside an agent-canvas/v1 specification. It is declarative: the browser edits it, the broker validates it, and the compiler binds it to approved resources. It does not execute agents or commands.
+
+## Three separate planes
+
+1. The specification records user intent, assumptions, constraints, and acceptance criteria.
+2. The approved workflow blueprint records the planned nodes, dependencies, authority, resources, checkpoints, and policies.
+3. A runtime execution record records attempts, outputs, evidence, review findings, and deviations.
+
+The blueprint must not be rewritten to make runtime history look planned. Physical adaptations belong in the execution record and project history.
+
+## Resources
+
+Every dependency used by a node is named in the graph resource registry.
+
+- initialization-artifact binds to a typed file staged in the canvas. Compilation resolves it to a bundle-relative path and SHA-256 digest.
+- harness-capability binds to an available runtime feature such as a terminal. It requires an explicit version.
+
+Resource kinds are prompt, agent-definition, skill, tool, template, knowledge, policy, and report-template. Nodes refer to resource IDs, never inline executable content.
+
+## Nodes
+
+| Kind | Purpose | Important declarations |
+| --- | --- | --- |
+| input | Introduce approved intent or context | resource IDs |
+| artifact | Read, produce, or transform a resource | resource ID and mode |
+| agent | Delegate bounded work | model, prompt, agent definition, context, skills, tools, write scope, criteria, timeout, budget |
+| operation | Perform a harness activity | research, test, report, materialize, checkpoint, or handoff |
+| review | Obtain independent judgment | model, prompt, subjects, evidence, upstream agents, bounded remediation |
+| gate | Require a decision or proof | user approval, verification, or policy criteria |
+| join | Synchronize branches | all or any strategy |
+
+Each node has a stable ID, visual position, typed input and output ports, provenance, review state, importance, and rationale. Position is presentation metadata and does not affect execution.
+
+## Edges and readiness
+
+Edges connect one declared output port to one declared input port of the same data type:
+
+- control sequences authorization to proceed;
+- context supplies bounded informational input;
+- artifact carries a produced durable resource;
+- evidence carries verification or review proof.
+
+A node is ready only when each required input port is satisfied. An input port accepts one edge unless multiple is true. A runtime may schedule independent ready nodes concurrently up to maximum_parallel_nodes.
+
+## Graph invariants
+
+Semantic validation blocks approval when:
+
+- a resource, node, edge, or port ID is duplicated;
+- a resource reference is missing, incompatible, or an unpinned capability;
+- an edge endpoint or port is absent or type-incompatible;
+- a required input is disconnected or exceeds its cardinality;
+- the graph contains a cycle;
+- an entry has incoming edges or a completion has outgoing edges;
+- a node is unreachable from every entry or cannot reach a completion;
+- an agent write scope is unsafe;
+- unordered agent nodes have overlapping write scopes;
+- a node remains unresolved, rejected, conflicting, or needs input.
+- a review fails to declare independence from every upstream agent.
+
+Write scopes are repository-relative glob-like paths. Absolute paths, parent traversal, Windows separators, .git, and .formalprompt are rejected.
+
+## Reviews and repair
+
+The declared graph remains acyclic even when a project expects review-repair iterations. A review node carries a maximum number of rounds, a repair template resource, and an exhaustion action. At runtime, each repair is a new forward-only attempt linked to the failed review. This preserves the immutable user-approved intent while retaining causal history.
+
+## Compilation
+
+An approved graph produces:
+
+- artifacts/workflow.json using agent-workflow-compiled/v1;
+- artifacts/EXECUTION_CONTRACT.md for the primary execution agent.
+
+The compiled object contains the exact approved graph, approved document digest, and resolved resources. Initialization artifacts resolve to content hashes; harness capabilities resolve to capability names and versions. Both outputs are members of the signed manifest and are checked by the strict result verifier.
+
+## Browser editing
+
+The Workflow tab renders the DAG on a scrollable canvas. Users can select and inspect nodes, edit complete node declarations, move nodes by pointer or keyboard, add nodes, connect compatible ports, remove non-boundary nodes or edges, and arrange the graph by dependency level. Every save uses optimistic revision control, invalidates earlier approval and review, and runs server-side validation.
+
+The editor renders agent-authored values as text and JSON data. It does not evaluate graph content as HTML or JavaScript. Moving or arranging nodes changes presentation state only. A node becomes user-confirmed only when the user explicitly saves its declaration.

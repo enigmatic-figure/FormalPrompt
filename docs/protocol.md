@@ -143,6 +143,11 @@ complete canvas defining another focused clarification round or adding initializ
 canonical state; the user must apply it against the source revision, and stale proposals are
 rejected.
 
+A ready initialization may also carry an `agent-workflow/v1` object. It is an acyclic, typed,
+resource-referenced blueprint that the user can inspect and edit before approval. See
+`docs/workflow-protocol.md` for its node kinds, invariants, compilation contract, and separation
+from runtime evidence.
+
 Assistant failures are recorded and returned as failures; they never block ordinary editing or
 corrupt the canonical document.
 
@@ -159,7 +164,9 @@ A compiled run returns:
   "document_sha256": "...",
   "unresolved_count": 0,
   "artifacts": {},
-  "handoff": "artifacts/initialization/prompts/PRIMARY_AGENT.md"
+  "handoff": "artifacts/initialization/prompts/PRIMARY_AGENT.md",
+  "workflow": "artifacts/workflow.json",
+  "execution_contract": "artifacts/EXECUTION_CONTRACT.md"
 }
 ```
 
@@ -167,3 +174,7 @@ Paths are relative to the run directory in persisted manifests. A result is cons
 state is terminal and the state approval, result, manifest, specification, current document, file
 membership, sizes, hashes, and declared handoff all verify. CLI output may additionally include the
 absolute run-directory path.
+
+The workflow fields appear only when the approved document contains a workflow. Their files are
+manifest members and the verifier also checks the compiled graph, approved digest, resource paths,
+resource hashes, and pinned capabilities.

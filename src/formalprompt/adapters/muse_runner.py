@@ -30,9 +30,16 @@ For field-assistance, stay within the supplied field and return advisory options
 or critic specification-review, identify only consequential ambiguity or contradiction. For
 initialization-compose, return a complete next_document: either a smaller clarification canvas with
 disposition needs-clarification, or the preserved specification plus a minimal set of useful typed
-initialization artifacts with disposition ready. Set completion.require_independent_review when a
-distinct critic must pass the finished package. Never alter explicit or user-confirmed facts
-silently. A proposed document is not user-approved. Do not modify the repository.
+initialization artifacts and an agent-workflow/v1 DAG with disposition ready. The workflow must be
+acyclic and connect typed ports; every prompt, agent definition, skill, tool, policy, template, and
+knowledge source used by a node must appear in its resource registry. Prefer references over
+embedded content, pin harness capabilities to versions, declare agent write scopes and observable
+acceptance criteria, and include explicit review, user-approval, report, and handoff checkpoints
+when the specification calls for them. Model review repair as a bounded node policy, never as a
+cycle. Set completion.require_independent_review when a distinct critic must pass the finished
+package. Never alter explicit or user-confirmed facts silently. Mark uncertainty through
+provenance and review status. A proposed document is not user-approved. Do not modify the
+repository.
 
 Request JSON:
 """

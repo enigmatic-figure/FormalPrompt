@@ -12,8 +12,10 @@ from formalprompt.artifacts import (
     verify_compiled_run,
     verify_staged_compilation,
 )
+from formalprompt.handoff_compiler import execution_brief, specification_markdown
 from formalprompt.integrity import document_sha256
 from formalprompt.store import RevisionConflict, RunStore
+from formalprompt.workflow_compiler import compile_workflow_payloads
 
 
 class ApprovalRequired(Exception):
@@ -72,8 +74,8 @@ def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
                 document.model_dump(mode="json"), ensure_ascii=False, indent=2
             )
             + "\n",
-            "SPECIFICATION.md": _specification_markdown(document),
-            "EXECUTION_BRIEF.md": _execution_brief(document),
+            "SPECIFICATION.md": specification_markdown(document),
+            "EXECUTION_BRIEF.md": execution_brief(document),
             "approval.json": json.dumps(approval, ensure_ascii=False, indent=2) + "\n",
         }
         artifact_paths: dict[str, str] = {}
@@ -88,6 +90,18 @@ def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
                 artifact.content if artifact.content.endswith("\n") else artifact.content + "\n"
             )
             artifact_paths[artifact.id] = relative
+        workflow_payloads = compile_workflow_payloads(
+            document,
+            document_digest=approved_document_sha256,
+            artifact_paths=artifact_paths,
+            artifact_payloads=payloads,
+        )
+        for name, content in workflow_payloads.items():
+            canonical_name = name.casefold()
+            if canonical_name in compiled_paths:
+                raise ValueError(f"Duplicate compiled workflow artifact path: {name}")
+            compiled_paths.add(canonical_name)
+            payloads[name] = content
         for name, content in payloads.items():
             destination = _artifact_destination(artifacts, name)
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -129,6 +143,9 @@ def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
             "artifacts": files,
             "handoff": handoff,
         }
+        if document.workflow is not None:
+            result["workflow"] = "artifacts/workflow.json"
+            result["execution_contract"] = "artifacts/EXECUTION_CONTRACT.md"
         _atomic_write(
             store.path / "result.json",
             json.dumps(result, ensure_ascii=False, indent=2) + "\n",
@@ -148,96 +165,6 @@ def _discard_staged_compilation(store: RunStore, revision: int) -> None:
     for partial in (store.path / "result.json", store.path / "result.json.tmp"):
         partial.unlink(missing_ok=True)
     store.abort_compilation(revision)
-
-
-def _specification_markdown(document) -> str:
-    lines = [
-        f"# {document.metadata.title}",
-        "",
-        document.metadata.description,
-        "",
-    ]
-    for tab in document.tabs:
-        lines.extend([f"## {tab.label}", ""])
-        if tab.description:
-            lines.extend([tab.description, ""])
-        for section in tab.sections:
-            lines.extend([f"### {section.title}", ""])
-            if section.description:
-                lines.extend([section.description, ""])
-            for field in section.fields:
-                lines.extend(
-                    [
-                        f"#### {field.label}",
-                        "",
-                        _display_value(field.value),
-                        "",
-                        f"Provenance: {field.provenance}",
-                        f"Review status: {field.review_status}",
-                        f"Importance: {field.importance}",
-                    ]
-                )
-                if field.rationale:
-                    lines.append(f"Rationale: {field.rationale}")
-                lines.append("")
-    if document.initialization.artifacts:
-        lines.extend(["## Initialization artifacts", ""])
-        for artifact in document.initialization.artifacts:
-            lines.extend(
-                [
-                    f"### {artifact.title}",
-                    "",
-                    f"Path: `{artifact.path}`",
-                    f"Kind: {artifact.kind}",
-                    f"Provenance: {artifact.provenance}",
-                    f"Review status: {artifact.review_status}",
-                    "",
-                    artifact.content,
-                    "",
-                ]
-            )
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _execution_brief(document) -> str:
-    lines = [
-        f"# Execution Brief: {document.metadata.title}",
-        "",
-        document.metadata.description,
-        "",
-        "## Confirmed specification",
-        "",
-    ]
-    for field in document.fields():
-        lines.append(f"- **{field.label}:** {_display_value(field.value)}")
-    if document.initialization.artifacts:
-        lines.extend(["", "## Initialization package", ""])
-        for artifact in document.initialization.artifacts:
-            lines.append(
-                f"- **{artifact.title}** ({artifact.kind}): `initialization/{artifact.path}`"
-            )
-    lines.extend(
-        [
-            "",
-            "## Execution contract",
-            "",
-            "Implement against the confirmed values above. Treat blocker and high-importance "
-            "fields as constraints. Verify the resulting work against this specification before "
-            "reporting completion.",
-            "",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def _display_value(value: Any) -> str:
-    if value is None or value == "" or value == []:
-        return "_Not specified_"
-    if isinstance(value, bool):
-        return "Yes" if value else "No"
-    if isinstance(value, list):
-        return ", ".join(str(item) for item in value)
-    return str(value)
 
 
 def _atomic_write(path: Path, content: str) -> None:

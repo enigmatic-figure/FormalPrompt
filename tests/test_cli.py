@@ -49,13 +49,15 @@ def test_template_command_writes_a_structurally_valid_canvas(tmp_path):
     assert len(document["tabs"]) >= 3
 
 
-def test_minimal_and_self_hosting_templates_are_available(tmp_path):
-    for name in ("minimal", "formalprompt-self-hosting"):
+def test_additional_templates_are_available(tmp_path):
+    for name in ("minimal", "formalprompt-self-hosting", "workflow-project"):
         output = tmp_path / f"{name}.json"
         result = runner.invoke(app, ["template", name, str(output)])
         assert result.exit_code == 0
         document = json.loads(output.read_text(encoding="utf-8"))
         assert document["protocol"] == "agent-canvas/v1"
+        if name == "workflow-project":
+            assert document["workflow"]["protocol"] == "agent-workflow/v1"
 
 
 def test_schema_command_writes_protocol_schema(tmp_path):

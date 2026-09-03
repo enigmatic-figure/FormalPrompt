@@ -4,6 +4,7 @@ let session = null;
 let validation = { ready: false, issues: [] };
 let activeTab = 0;
 let busy = false;
+let selectedWorkflowNode = null;
 const fieldAssistance = new Map();
 let lastReview = null;
 let lastComposition = null;
@@ -144,7 +145,11 @@ async function applyProposal(requestId) {
     });
     lastReview = null;
     lastComposition = null;
-    activeTab = (session.document.initialization?.artifacts || []).length ? session.document.tabs.length : 0;
+    if (session.document.workflow) {
+      activeTab = session.document.tabs.length + ((session.document.initialization?.artifacts || []).length ? 1 : 0);
+    } else {
+      activeTab = (session.document.initialization?.artifacts || []).length ? session.document.tabs.length : 0;
+    }
     await refreshValidation();
     outcome = "Proposed canvas applied for user review";
   } catch (error) {
@@ -287,7 +292,9 @@ function renderWorkspace() {
   const workspace = element("section", { className: "workspace", id: "workspace", "aria-label": "Specification fields" });
   const tabs = session.document.tabs;
   const artifacts = session.document.initialization?.artifacts || [];
-  const tabCount = tabs.length + (artifacts.length ? 1 : 0);
+  const workflow = session.document.workflow;
+  const workflowIndex = tabs.length + (artifacts.length ? 1 : 0);
+  const tabCount = workflowIndex + (workflow ? 1 : 0);
   if (activeTab >= tabCount) activeTab = 0;
   const tabList = element("div", { className: "tab-list", role: "tablist", "aria-label": "Specification sections" });
   tabs.forEach((tab, index) => {
@@ -319,9 +326,27 @@ function renderWorkspace() {
     button.addEventListener("keydown", (event) => moveTab(event, index));
     tabList.append(button);
   }
+  if (workflow) {
+    const button = element("button", {
+      className: "tab",
+      role: "tab",
+      id: "tab-workflow",
+      "aria-selected": workflowIndex === activeTab,
+      "aria-controls": "panel-workflow",
+      tabindex: workflowIndex === activeTab ? 0 : -1,
+      text: `Workflow · ${workflow.nodes.length}`,
+    });
+    button.addEventListener("click", () => { activeTab = workflowIndex; render(); });
+    button.addEventListener("keydown", (event) => moveTab(event, workflowIndex));
+    tabList.append(button);
+  }
   workspace.append(tabList);
   if (activeTab === tabs.length && artifacts.length) {
     workspace.append(renderInitialization(artifacts));
+    return workspace;
+  }
+  if (activeTab === workflowIndex && workflow) {
+    workspace.append(renderWorkflow(workflow));
     return workspace;
   }
   const current = tabs[activeTab];
@@ -340,12 +365,314 @@ function renderWorkspace() {
 function moveTab(event, index) {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
-  const count = session.document.tabs.length + ((session.document.initialization?.artifacts || []).length ? 1 : 0);
+  const count = session.document.tabs.length
+    + ((session.document.initialization?.artifacts || []).length ? 1 : 0)
+    + (session.document.workflow ? 1 : 0);
   if (event.key === "Home") activeTab = 0;
   else if (event.key === "End") activeTab = count - 1;
   else activeTab = (index + (event.key === "ArrowRight" ? 1 : -1) + count) % count;
   render();
   document.querySelectorAll('[role="tab"]')[activeTab]?.focus();
+}
+
+function renderWorkflow(graph) {
+  const panel = element("div", {
+    className: "tab-panel workflow-panel",
+    role: "tabpanel",
+    id: "panel-workflow",
+    "aria-labelledby": "tab-workflow",
+  });
+  const kind = element("select", { className: "control graph-kind", "aria-label": "Node type" });
+  for (const value of ["input", "artifact", "agent", "operation", "review", "gate", "join"]) {
+    kind.append(element("option", { value, text: value.replace("-", " ") }));
+  }
+  const add = element("button", { className: "button compact", text: "Add node", disabled: busy });
+  add.addEventListener("click", () => addWorkflowNode(graph, kind.value));
+  const arrange = element("button", { className: "button compact", text: "Arrange DAG", disabled: busy });
+  arrange.addEventListener("click", () => arrangeWorkflow(graph));
+  panel.append(
+    element("div", { className: "graph-heading" }, [
+      element("div", {}, [
+        element("h2", { text: graph.title }),
+        element("p", { className: "tab-intro", text: graph.description || "Approved execution blueprint" }),
+      ]),
+      element("div", { className: "graph-toolbar" }, [kind, add, arrange]),
+    ]),
+  );
+
+  const surface = element("div", { className: "graph-surface", tabindex: 0 });
+  const width = Math.max(1500, ...graph.nodes.map((node) => node.position.x + 300));
+  const height = Math.max(720, ...graph.nodes.map((node) => node.position.y + 240));
+  surface.style.width = `${width}px`;
+  surface.style.height = `${height}px`;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "graph-edges");
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  svg.setAttribute("aria-hidden", "true");
+  const nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
+  for (const edge of graph.edges) {
+    const source = nodeMap.get(edge.source_node);
+    const target = nodeMap.get(edge.target_node);
+    if (!source || !target) continue;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const x1 = source.position.x + 230;
+    const y1 = source.position.y + 64;
+    const x2 = target.position.x;
+    const y2 = target.position.y + 64;
+    const bend = Math.max(50, Math.abs(x2 - x1) * 0.45);
+    path.setAttribute("d", `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`);
+    path.setAttribute("class", `graph-edge edge-${edge.data_type}`);
+    path.setAttribute("data-edge", edge.id);
+    svg.append(path);
+  }
+  surface.append(svg);
+  for (const node of graph.nodes) surface.append(renderWorkflowNode(graph, node));
+  const viewport = element("div", { className: "graph-viewport", "aria-label": "Workflow node graph" }, [surface]);
+  const inspector = renderWorkflowInspector(graph, nodeMap.get(selectedWorkflowNode));
+  panel.append(element("div", { className: "graph-layout" }, [viewport, inspector]));
+  return panel;
+}
+
+function renderWorkflowNode(graph, node) {
+  const card = element("article", {
+    className: `graph-node node-${node.kind}${node.id === selectedWorkflowNode ? " selected" : ""}`,
+    tabindex: 0,
+    "data-node": node.id,
+    "data-provenance": node.provenance,
+    "aria-label": `${node.kind} node ${node.title}`,
+  });
+  card.style.left = `${node.position.x}px`;
+  card.style.top = `${node.position.y}px`;
+  card.append(
+    element("div", { className: "node-title" }, [
+      makeBadge(node.kind),
+      element("strong", { text: node.title }),
+    ]),
+    node.description ? element("p", { text: node.description }) : null,
+    element("p", { className: "node-meta", text: `${node.provenance.replace("-", " ")} · ${node.review_status.replace("-", " ")}` }),
+  );
+  const inputs = element("div", { className: "node-ports inputs" });
+  for (const port of node.input_ports) inputs.append(element("span", { className: `node-port port-${port.data_type}`, title: port.label }));
+  const outputs = element("div", { className: "node-ports outputs" });
+  for (const port of node.output_ports) outputs.append(element("span", { className: `node-port port-${port.data_type}`, title: port.label }));
+  card.append(inputs, outputs);
+  card.addEventListener("click", () => { selectedWorkflowNode = node.id; render(); });
+  card.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const delta = event.shiftKey ? 50 : 10;
+    const moved = structuredClone(graph);
+    const target = moved.nodes.find((candidate) => candidate.id === node.id);
+    if (event.key === "ArrowLeft") target.position.x = Math.max(0, target.position.x - delta);
+    if (event.key === "ArrowRight") target.position.x += delta;
+    if (event.key === "ArrowUp") target.position.y = Math.max(0, target.position.y - delta);
+    if (event.key === "ArrowDown") target.position.y += delta;
+    saveWorkflow(moved, `${node.title} moved`);
+  });
+  card.addEventListener("pointerdown", (event) => beginNodeDrag(event, graph, node, card));
+  return card;
+}
+
+function beginNodeDrag(event, graph, node, card) {
+  if (event.button !== 0) return;
+  selectedWorkflowNode = node.id;
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const origin = { ...node.position };
+  let moved = false;
+  card.setPointerCapture(event.pointerId);
+  const move = (current) => {
+    const x = Math.max(0, origin.x + current.clientX - startX);
+    const y = Math.max(0, origin.y + current.clientY - startY);
+    moved ||= Math.abs(x - origin.x) + Math.abs(y - origin.y) > 4;
+    card.style.left = `${x}px`;
+    card.style.top = `${y}px`;
+  };
+  const finish = (current) => {
+    card.removeEventListener("pointermove", move);
+    card.removeEventListener("pointerup", finish);
+    card.removeEventListener("pointercancel", finish);
+    if (!moved) return;
+    const updated = structuredClone(graph);
+    const target = updated.nodes.find((candidate) => candidate.id === node.id);
+    target.position.x = Math.max(0, Math.round(origin.x + current.clientX - startX));
+    target.position.y = Math.max(0, Math.round(origin.y + current.clientY - startY));
+    saveWorkflow(updated, `${node.title} moved`);
+  };
+  card.addEventListener("pointermove", move);
+  card.addEventListener("pointerup", finish);
+  card.addEventListener("pointercancel", finish);
+}
+
+function renderWorkflowInspector(graph, selected) {
+  const inspector = element("aside", { className: "graph-inspector", "aria-label": "Workflow node inspector" });
+  if (!selected) {
+    inspector.append(
+      element("h2", { text: "Workflow resources" }),
+      element("p", { className: "description", text: "Select a node to inspect its exact declaration. Drag nodes or use arrow keys to change layout." }),
+    );
+    for (const resource of graph.resources) {
+      inspector.append(element("div", { className: "resource-row" }, [
+        makeBadge(resource.kind),
+        element("span", { text: resource.title }),
+        element("code", { text: resource.reference }),
+      ]));
+    }
+    return inspector;
+  }
+  inspector.append(
+    element("h2", { text: selected.title }),
+    element("p", { className: "description", text: "The declaration below is canonical workflow state. Node ID and kind are immutable in this editor." }),
+  );
+  const declaration = element("textarea", { className: "control node-json", "aria-label": `${selected.title} declaration` });
+  declaration.value = JSON.stringify(selected, null, 2);
+  const save = element("button", { className: "button primary", text: "Save node declaration", disabled: busy });
+  save.addEventListener("click", () => {
+    try {
+      const candidate = JSON.parse(declaration.value);
+      if (candidate.id !== selected.id || candidate.kind !== selected.kind) throw new Error("Node ID and kind cannot be changed here");
+      const updated = structuredClone(graph);
+      updated.nodes[updated.nodes.findIndex((node) => node.id === selected.id)] = candidate;
+      saveWorkflow(updated, `${selected.title} declaration saved`, [selected.id]);
+    } catch (error) {
+      announce(error.message, true);
+    }
+  });
+  const targets = element("select", { className: "control", "aria-label": "Connection target" });
+  for (const node of graph.nodes.filter((node) => node.id !== selected.id)) {
+    targets.append(element("option", { value: node.id, text: node.title }));
+  }
+  const connect = element("button", { className: "button", text: "Connect compatible ports", disabled: busy || !targets.children.length });
+  connect.addEventListener("click", () => connectWorkflowNodes(graph, selected.id, targets.value));
+  const isBoundary = graph.entry_nodes.includes(selected.id) || graph.completion_nodes.includes(selected.id);
+  const remove = element("button", {
+    className: "button danger",
+    text: isBoundary ? "Boundary node cannot be deleted" : "Delete node",
+    disabled: busy || graph.nodes.length === 1 || isBoundary,
+  });
+  remove.addEventListener("click", () => deleteWorkflowNode(graph, selected.id));
+  inspector.append(declaration, save, element("hr"), targets, connect, remove);
+  const edges = graph.edges.filter((edge) => edge.source_node === selected.id || edge.target_node === selected.id);
+  if (edges.length) inspector.append(element("h3", { text: "Connections" }));
+  for (const edge of edges) {
+    const drop = element("button", { className: "edge-delete", text: "Remove", disabled: busy });
+    drop.addEventListener("click", () => {
+      const updated = structuredClone(graph);
+      updated.edges = updated.edges.filter((candidate) => candidate.id !== edge.id);
+      saveWorkflow(updated, `Connection ${edge.id} removed`);
+    });
+    inspector.append(element("div", { className: "edge-row" }, [
+      element("code", { text: `${edge.source_node} → ${edge.target_node}` }), drop,
+    ]));
+  }
+  return inspector;
+}
+
+function connectWorkflowNodes(graph, sourceId, targetId) {
+  const source = graph.nodes.find((node) => node.id === sourceId);
+  const target = graph.nodes.find((node) => node.id === targetId);
+  const pair = source.output_ports.flatMap((output) => target.input_ports.map((input) => [output, input]))
+    .find(([output, input]) => output.data_type === input.data_type);
+  if (!pair) { announce("These nodes have no compatible open port types", true); return; }
+  const [output, input] = pair;
+  const occupied = graph.edges.some((edge) => edge.target_node === targetId && edge.target_port === input.id);
+  if (occupied && !input.multiple) { announce(`${target.title} port ${input.label} already has a connection`, true); return; }
+  const updated = structuredClone(graph);
+  const base = `${sourceId}-${targetId}-${output.data_type}`.replace(/[^A-Za-z0-9_.-]/g, "-");
+  let id = base;
+  let suffix = 2;
+  while (updated.edges.some((edge) => edge.id === id)) id = `${base}-${suffix++}`;
+  updated.edges.push({ id, source_node: sourceId, source_port: output.id, target_node: targetId, target_port: input.id, data_type: output.data_type, label: "" });
+  saveWorkflow(updated, `Connected ${source.title} to ${target.title}`);
+}
+
+function deleteWorkflowNode(graph, nodeId) {
+  const updated = structuredClone(graph);
+  updated.nodes = updated.nodes.filter((node) => node.id !== nodeId);
+  updated.edges = updated.edges.filter((edge) => edge.source_node !== nodeId && edge.target_node !== nodeId);
+  updated.entry_nodes = updated.entry_nodes.filter((id) => id !== nodeId);
+  updated.completion_nodes = updated.completion_nodes.filter((id) => id !== nodeId);
+  selectedWorkflowNode = null;
+  saveWorkflow(updated, `Node ${nodeId} deleted`);
+}
+
+function addWorkflowNode(graph, kind) {
+  const updated = structuredClone(graph);
+  let index = updated.nodes.length + 1;
+  let id = `${kind}-${index}`;
+  while (updated.nodes.some((node) => node.id === id)) id = `${kind}-${++index}`;
+  const position = { x: 80 + (index % 4) * 260, y: 100 + Math.floor(index / 4) * 190 };
+  const controlIn = [{ id: "in", label: "Input", data_type: "control", required: true, multiple: false }];
+  const controlOut = [{ id: "out", label: "Output", data_type: "control", required: false, multiple: false }];
+  const common = { id, kind, title: `${kind[0].toUpperCase()}${kind.slice(1)} ${index}`, description: "", position, input_ports: controlIn, output_ports: controlOut, provenance: "user-confirmed", review_status: "accepted", importance: "normal", rationale: "Added by the user." };
+  const prompt = updated.resources.find((resource) => resource.kind === "prompt")?.id || "select.prompt";
+  let node;
+  if (kind === "input") node = { ...common, input_ports: [], resource_ids: [] };
+  else if (kind === "artifact") node = { ...common, resource_id: updated.resources[0]?.id || "select.resource", mode: "read" };
+  else if (kind === "agent") node = { ...common, model: "select-model", prompt_resource: prompt, agent_definition_resource: null, context_resources: [], skill_resources: [], tool_resources: [], write_scope: [], acceptance_criteria: ["Define observable completion"], timeout_seconds: 3600, token_budget: null };
+  else if (kind === "operation") node = { ...common, operation: "research", instruction_resource: prompt, resource_ids: [], acceptance_criteria: ["Define observable completion"] };
+  else if (kind === "review") node = { ...common, model: "select-review-model", prompt_resource: prompt, subject_resources: [], required_evidence: ["Define required evidence"], independent: true, independent_from: [], remediation: { maximum_rounds: 3, repair_template_resource: updated.resources.find((resource) => ["template", "prompt"].includes(resource.kind))?.id || "select.repair-template", exhaustion: "request-user-decision" } };
+  else if (kind === "gate") node = { ...common, gate: "user-approval", criteria: ["Define approval condition"], required_evidence: [] };
+  else node = { ...common, strategy: "all" };
+  updated.nodes.push(node);
+  selectedWorkflowNode = id;
+  saveWorkflow(updated, `${node.title} added`);
+}
+
+function arrangeWorkflow(graph) {
+  const updated = structuredClone(graph);
+  const indegree = new Map(updated.nodes.map((node) => [node.id, 0]));
+  const outgoing = new Map(updated.nodes.map((node) => [node.id, []]));
+  for (const edge of updated.edges) {
+    if (!indegree.has(edge.target_node) || !outgoing.has(edge.source_node)) continue;
+    indegree.set(edge.target_node, indegree.get(edge.target_node) + 1);
+    outgoing.get(edge.source_node).push(edge.target_node);
+  }
+  const queue = [...updated.nodes.filter((node) => indegree.get(node.id) === 0).map((node) => ({ id: node.id, level: 0 }))];
+  const levels = new Map();
+  while (queue.length) {
+    const current = queue.shift();
+    levels.set(current.id, Math.max(levels.get(current.id) || 0, current.level));
+    for (const target of outgoing.get(current.id)) {
+      indegree.set(target, indegree.get(target) - 1);
+      if (indegree.get(target) === 0) queue.push({ id: target, level: current.level + 1 });
+    }
+  }
+  const rows = new Map();
+  for (const node of updated.nodes) {
+    const level = levels.get(node.id) || 0;
+    const row = rows.get(level) || 0;
+    node.position = { x: 50 + level * 280, y: 70 + row * 180 };
+    rows.set(level, row + 1);
+  }
+  saveWorkflow(updated, "Workflow arranged by dependency level");
+}
+
+async function saveWorkflow(workflow, message, confirmedNodeIds = []) {
+  if (busy) return;
+  setBusy(true, "Saving workflow…");
+  let failed = false;
+  let outcome = message;
+  try {
+    session = await api("/api/workflow", {
+      method: "PUT",
+      body: JSON.stringify({
+        workflow,
+        expected_revision: session.state.revision,
+        confirmed_node_ids: confirmedNodeIds,
+      }),
+    });
+    await refreshValidation();
+  } catch (error) {
+    outcome = error.message;
+    failed = true;
+    await load();
+  } finally {
+    setBusy(false);
+    render();
+    announce(outcome, failed);
+  }
 }
 
 function renderInitialization(artifacts) {

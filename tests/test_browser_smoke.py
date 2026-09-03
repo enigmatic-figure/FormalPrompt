@@ -83,3 +83,55 @@ def test_real_chrome_edit_validate_approve_compile_journey(tmp_path):
         assert (store.path / "result.json").is_file()
     finally:
         runtime.stop()
+
+
+def test_real_chrome_workflow_graph_edit_journey(tmp_path):
+    chrome = _chrome_path()
+    node = shutil.which("node")
+    if not chrome or not node:
+        pytest.skip("Chrome-family browser and Node are required for the browser smoke test")
+    template = ROOT / "src" / "formalprompt" / "templates" / "workflow-project.json"
+    document = CanvasDocument.model_validate_json(template.read_text(encoding="utf-8"))
+    store = RunStore.create(tmp_path, document)
+    runtime = CanvasRuntime(store, token="workflow-browser-smoke-token", renderer="none")
+    runtime.start()
+    try:
+        assert runtime.wait_until_ready(timeout_seconds=5)
+        environment = {
+            **os.environ,
+            "FORMALPROMPT_CANVAS_URL": runtime.canvas_url,
+            "CHROME_PATH": chrome,
+            "CHROME_DEBUG_PORT": str(_unused_port()),
+        }
+        completed = subprocess.run(
+            [node, str(ROOT / "scripts" / "workflow-browser-smoke.mjs")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=environment,
+            timeout=30,
+            check=False,
+        )
+
+        assert completed.returncode == 0, completed.stderr
+        journey = json.loads(completed.stdout)
+        assert journey["initial"] == {
+            "nodes": 6,
+            "edges": 6,
+            "title": "Validated implementation workflow",
+            "revision": 0,
+        }
+        assert journey["final"] == {
+            "nodes": 6,
+            "edges": 6,
+            "selectedTitle": "Implement verified project",
+            "inspector": "Implement verified project",
+            "revision": 1,
+            "hashCleared": True,
+        }
+        saved = store.read_document().workflow
+        assert next(item for item in saved.nodes if item.id == "implement").title == (
+            "Implement verified project"
+        )
+    finally:
+        runtime.stop()

@@ -34,7 +34,7 @@ Consume an approved FormalPrompt result as a compact execution contract. Preserv
    `unresolved_count` is acceptable for the requested work.
 3. Read `artifacts/manifest.json` only when its file inventory is needed; do not substitute manual
    spot checks for the command's complete verifier.
-4. Read the handoff path declared by `result.json`. For an initialization package this may be a primary prompt beneath `artifacts/initialization/`; otherwise it is normally `artifacts/EXECUTION_BRIEF.md`. Load `artifacts/SPECIFICATION.md` or `specification.json` only when a required detail is absent from the declared handoff.
+4. If the result declares `workflow` and `execution_contract`, switch to the agent-workflow-execution skill and use those files as the execution entry point. Otherwise read the handoff path declared by `result.json`. For an initialization package this may be a primary prompt beneath `artifacts/initialization/`; otherwise it is normally `artifacts/EXECUTION_BRIEF.md`. Load `artifacts/SPECIFICATION.md` or `specification.json` only when a required detail is absent from the declared handoff.
 5. Do not load `events.jsonl` or assistant request/response files by default. Inspect them only when the user asks for an audit or a specific final decision cannot be explained from approved artifacts.
 6. Translate the execution brief into the agent's normal task tracking and begin implementation. Preserve stated exclusions, acceptance criteria, and verification requirements.
 7. Before reporting completion, compare the delivered work against the approved specification revision named in both result and manifest.
