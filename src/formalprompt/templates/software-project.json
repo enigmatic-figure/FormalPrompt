@@ -1,0 +1,165 @@
+{
+  "protocol": "agent-canvas/v1",
+  "kind": "formalprompt/specification",
+  "metadata": {
+    "title": "Software project specification",
+    "description": "Confirm intent, constraints, and delivery expectations before execution.",
+    "created_by": "primary-agent"
+  },
+  "tabs": [
+    {
+      "id": "intent",
+      "label": "Intent",
+      "description": "Define the outcome and the evidence that will count as success.",
+      "sections": [
+        {
+          "id": "intent.outcome",
+          "title": "Desired outcome",
+          "fields": [
+            {
+              "id": "project.objective",
+              "label": "Primary objective",
+              "type": "textarea",
+              "value": null,
+              "description": "State the concrete result the project should produce.",
+              "placeholder": "What should exist or work when this project is complete?",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "unresolved",
+              "review_status": "needs-input",
+              "validation": {"min_length": 10},
+              "assistance": {"enabled": true, "prompt": "Offer precise, outcome-oriented alternatives without inventing scope."}
+            },
+            {
+              "id": "project.success_criteria",
+              "label": "Acceptance criteria",
+              "type": "textarea",
+              "value": null,
+              "description": "List observable checks that establish completion.",
+              "required": true,
+              "importance": "high",
+              "provenance": "unresolved",
+              "review_status": "needs-input",
+              "assistance": {"enabled": true, "prompt": "Suggest measurable acceptance criteria grounded in the stated objective."}
+            },
+            {
+              "id": "project.out_of_scope",
+              "label": "Explicit exclusions",
+              "type": "textarea",
+              "value": "",
+              "description": "Record work that should not be included.",
+              "importance": "normal",
+              "provenance": "unresolved",
+              "review_status": "needs-input"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "constraints",
+      "label": "Constraints",
+      "description": "Confirm the operating environment and consequential technical boundaries.",
+      "sections": [
+        {
+          "id": "constraints.runtime",
+          "title": "Runtime and compatibility",
+          "fields": [
+            {
+              "id": "runtime.platforms",
+              "label": "Target platforms",
+              "type": "multiselect",
+              "value": [],
+              "required": true,
+              "importance": "high",
+              "provenance": "unresolved",
+              "review_status": "needs-input",
+              "options": [
+                {"value": "windows", "label": "Windows", "implications": "Avoid POSIX-only assumptions."},
+                {"value": "macos", "label": "macOS", "implications": "Account for application bundle and browser conventions."},
+                {"value": "linux", "label": "Linux", "implications": "Support graphical and headless environments."}
+              ]
+            },
+            {
+              "id": "runtime.delivery",
+              "label": "Distribution method",
+              "type": "select",
+              "value": "source",
+              "required": true,
+              "importance": "normal",
+              "provenance": "proposed",
+              "review_status": "unreviewed",
+              "rationale": "Source installation is the least assumptive starting point.",
+              "options": [
+                {"value": "source", "label": "Source checkout", "implications": "Fastest development path; users manage the runtime."},
+                {"value": "package", "label": "Language package", "implications": "Requires package metadata and release automation."},
+                {"value": "binary", "label": "Standalone binary", "implications": "Requires platform builds and larger release artifacts."}
+              ],
+              "assistance": {"enabled": true, "prompt": "Compare distribution choices for the selected platforms."}
+            },
+            {
+              "id": "runtime.constraints",
+              "label": "Other technical constraints",
+              "type": "textarea",
+              "value": "",
+              "importance": "normal",
+              "provenance": "unresolved",
+              "review_status": "needs-input"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "label": "Delivery",
+      "description": "Define expected artifacts and verification depth.",
+      "sections": [
+        {
+          "id": "delivery.outputs",
+          "title": "Artifacts and quality",
+          "fields": [
+            {
+              "id": "delivery.artifacts",
+              "label": "Required deliverables",
+              "type": "textarea",
+              "value": "Working implementation, automated tests, and usage documentation",
+              "required": true,
+              "importance": "high",
+              "provenance": "proposed",
+              "review_status": "unreviewed",
+              "rationale": "These are the minimum durable project outputs."
+            },
+            {
+              "id": "delivery.verification",
+              "label": "Verification level",
+              "type": "select",
+              "value": "integration",
+              "required": true,
+              "importance": "high",
+              "provenance": "proposed",
+              "review_status": "unreviewed",
+              "options": [
+                {"value": "unit", "label": "Unit tests", "implications": "Fast but does not prove the assembled workflow."},
+                {"value": "integration", "label": "Unit and integration tests", "implications": "Exercises component boundaries and main workflows."},
+                {"value": "end-to-end", "label": "Full end-to-end verification", "implications": "Includes a real browser and representative user journey."}
+              ]
+            },
+            {
+              "id": "delivery.notes",
+              "label": "Handoff notes",
+              "type": "textarea",
+              "value": "",
+              "importance": "low",
+              "provenance": "unresolved",
+              "review_status": "needs-input"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "completion": {
+    "require_user_approval": true
+  }
+}

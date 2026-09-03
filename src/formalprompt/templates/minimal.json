@@ -1,0 +1,45 @@
+{
+  "protocol": "agent-canvas/v1",
+  "kind": "formalprompt/specification",
+  "metadata": {
+    "title": "New specification",
+    "description": "Review and confirm the objective before execution.",
+    "created_by": "primary-agent"
+  },
+  "tabs": [
+    {
+      "id": "intent",
+      "label": "Intent",
+      "sections": [
+        {
+          "id": "intent.core",
+          "title": "Core request",
+          "fields": [
+            {
+              "id": "request.objective",
+              "label": "Objective",
+              "type": "textarea",
+              "value": null,
+              "description": "Describe the concrete outcome to produce.",
+              "placeholder": "What should be true when the work is complete?",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "unresolved",
+              "review_status": "needs-input",
+              "validation": {
+                "min_length": 10
+              },
+              "assistance": {
+                "enabled": true,
+                "prompt": "Help formulate a precise objective without adding unstated scope."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "completion": {
+    "require_user_approval": true
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "protocol": "agent-canvas/v1",
+  "kind": "formalprompt/specification",
+  "metadata": {
+    "title": "FormalPrompt self-hosting specification",
+    "description": "Use FormalPrompt's own canvas to review the product boundary, runtime, agent isolation, compilation, and MVP evidence.",
+    "created_by": "Forge"
+  },
+  "tabs": [
+    {
+      "id": "product",
+      "label": "Product",
+      "description": "Confirm the relationship between the general canvas runtime and its first workflow.",
+      "sections": [
+        {
+          "id": "product.boundary",
+          "title": "Product boundary",
+          "fields": [
+            {
+              "id": "product.agent_canvas",
+              "label": "General platform",
+              "type": "textarea",
+              "value": "Agent Canvas is a local, ephemeral interaction surface that CLI agents can use to present structured visual data, collect rich user input, and return a typed result.",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "explicit",
+              "review_status": "accepted"
+            },
+            {
+              "id": "product.formalprompt",
+              "label": "Reference application",
+              "type": "textarea",
+              "value": "FormalPrompt is the first Agent Canvas workflow: a provenance-aware specification workbench and deterministic handoff compiler.",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "explicit",
+              "review_status": "accepted"
+            },
+            {
+              "id": "product.canonical_state",
+              "label": "Canonical state",
+              "type": "select",
+              "value": "document",
+              "required": true,
+              "importance": "high",
+              "provenance": "proposed",
+              "review_status": "unreviewed",
+              "rationale": "A single declarative source of truth prevents divergence between UI, chat, and artifacts.",
+              "options": [
+                {"value": "document", "label": "Versioned canvas document", "implications": "The UI, assistants, validators, and compiler all project from one typed state."},
+                {"value": "conversation", "label": "Conversation transcript", "implications": "Flexible but difficult to validate, diff, and compile deterministically."}
+              ],
+              "assistance": {"enabled": true, "prompt": "Compare canonical-state choices for auditability and interoperability."}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "description": "Confirm browser, server, portability, and security decisions.",
+      "sections": [
+        {
+          "id": "runtime.interfaces",
+          "title": "Interfaces and portability",
+          "fields": [
+            {
+              "id": "runtime.renderers",
+              "label": "Browser interfaces",
+              "type": "multiselect",
+              "value": ["graphical", "carbonyl"],
+              "required": true,
+              "importance": "blocker",
+              "provenance": "explicit",
+              "review_status": "accepted",
+              "options": [
+                {"value": "graphical", "label": "Graphical browser", "implications": "Use the installed default browser for desktop users."},
+                {"value": "carbonyl", "label": "Carbonyl", "implications": "Use Chromium rendering inside terminal and SSH environments."},
+                {"value": "url-only", "label": "URL-only fallback", "implications": "Print the authenticated local URL when no launcher is available."}
+              ]
+            },
+            {
+              "id": "runtime.platforms",
+              "label": "Target host platforms",
+              "type": "multiselect",
+              "value": ["windows", "macos", "linux"],
+              "required": true,
+              "importance": "high",
+              "provenance": "inferred",
+              "review_status": "unreviewed",
+              "rationale": "A general CLI-agent tool should not assume one host OS.",
+              "options": [
+                {"value": "windows", "label": "Windows", "implications": "Graphical browser is primary; Carbonyl may require WSL or a container."},
+                {"value": "macos", "label": "macOS", "implications": "Both graphical browser and upstream Carbonyl binaries are plausible."},
+                {"value": "linux", "label": "Linux", "implications": "Support desktop, headless console, containers, and SSH."}
+              ]
+            },
+            {
+              "id": "runtime.backend",
+              "label": "Core implementation",
+              "type": "select",
+              "value": "python-fastapi",
+              "required": true,
+              "importance": "normal",
+              "provenance": "proposed",
+              "review_status": "unreviewed",
+              "rationale": "Python is broadly available in agent environments; FastAPI provides a small typed localhost boundary.",
+              "options": [
+                {"value": "python-fastapi", "label": "Python and FastAPI", "implications": "Simple agent integration and packaging; semantic static frontend needs no Node runtime."},
+                {"value": "node", "label": "Node.js", "implications": "Natural web tooling but adds a JavaScript runtime requirement."},
+                {"value": "rust", "label": "Rust", "implications": "Excellent binary distribution at greater initial implementation cost."}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "runtime.security",
+          "title": "Security boundary",
+          "fields": [
+            {
+              "id": "security.bind",
+              "label": "Default network binding",
+              "type": "select",
+              "value": "loopback",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "proposed",
+              "review_status": "accepted",
+              "options": [
+                {"value": "loopback", "label": "Loopback only", "implications": "Remote binding requires an explicit override."},
+                {"value": "network", "label": "Local network", "implications": "Requires stronger authentication, TLS, and origin controls."}
+              ]
+            },
+            {
+              "id": "security.generated_code",
+              "label": "Agent-supplied executable browser code",
+              "type": "checkbox",
+              "value": false,
+              "required": true,
+              "importance": "blocker",
+              "provenance": "proposed",
+              "review_status": "accepted",
+              "rationale": "Specification canvases should be declarative. Freeform generated presentations need a separate sandbox."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "agents",
+      "label": "Agents",
+      "description": "Define context isolation and authority for facilitator and reviewer processes.",
+      "sections": [
+        {
+          "id": "agents.roles",
+          "title": "Isolated roles",
+          "fields": [
+            {
+              "id": "agents.facilitator",
+              "label": "Facilitator responsibility",
+              "type": "textarea",
+              "value": "Answer field-level questions, explain options and implications, and identify consequential gaps without adding its transcript to the primary execution context.",
+              "required": true,
+              "importance": "high",
+              "provenance": "explicit",
+              "review_status": "accepted"
+            },
+            {
+              "id": "agents.critic",
+              "label": "Independent reviewer responsibility",
+              "type": "textarea",
+              "value": "Challenge ambiguity, contradictions, hidden assumptions, feasibility, and unverifiable acceptance criteria before user approval.",
+              "required": true,
+              "importance": "high",
+              "provenance": "explicit",
+              "review_status": "accepted"
+            },
+            {
+              "id": "agents.bridge",
+              "label": "Agent integration contract",
+              "type": "select",
+              "value": "command-json",
+              "required": true,
+              "importance": "high",
+              "provenance": "proposed",
+              "review_status": "unreviewed",
+              "options": [
+                {"value": "command-json", "label": "JSON stdin/stdout command", "implications": "Provider-neutral, process-isolated, and usable by any CLI agent adapter."},
+                {"value": "embedded-provider", "label": "Embedded model providers", "implications": "Easier initial setup but couples credentials and provider APIs into the core."}
+              ]
+            },
+            {
+              "id": "agents.write_authority",
+              "label": "Can suggestions mutate fields automatically?",
+              "type": "checkbox",
+              "value": false,
+              "required": true,
+              "importance": "blocker",
+              "provenance": "proposed",
+              "review_status": "accepted",
+              "rationale": "Assistant output remains advisory until the user explicitly applies it."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "label": "Delivery",
+      "description": "Confirm compiler outputs and the evidence required for the first usable release.",
+      "sections": [
+        {
+          "id": "delivery.artifacts",
+          "title": "Compilation and handoff",
+          "fields": [
+            {
+              "id": "delivery.bundle",
+              "label": "Compiled run bundle",
+              "type": "textarea",
+              "value": "Canonical JSON specification, readable Markdown specification, compact execution brief, approval record, event journal, content-hash manifest, and machine-readable result.",
+              "required": true,
+              "importance": "high",
+              "provenance": "inferred",
+              "review_status": "unreviewed"
+            },
+            {
+              "id": "delivery.write_scope",
+              "label": "Compiler write scope",
+              "type": "select",
+              "value": "run-directory",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "proposed",
+              "review_status": "accepted",
+              "options": [
+                {"value": "run-directory", "label": "Stage inside run directory", "implications": "Project modification becomes a separate explicit operation."},
+                {"value": "project", "label": "Write directly into project", "implications": "Convenient but allows generated setup to overwrite user-owned files."}
+              ]
+            },
+            {
+              "id": "delivery.mvp_evidence",
+              "label": "MVP acceptance evidence",
+              "type": "textarea",
+              "value": null,
+              "description": "State the exact automated and manual evidence required before calling the reference workflow usable.",
+              "required": true,
+              "importance": "blocker",
+              "provenance": "unresolved",
+              "review_status": "needs-input",
+              "validation": {"min_length": 20},
+              "assistance": {"enabled": true, "prompt": "Propose concrete cross-platform, API, browser, security, and end-to-end acceptance checks."}
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "completion": {
+    "require_user_approval": true
+  }
+}
