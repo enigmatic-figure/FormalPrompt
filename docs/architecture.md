@@ -40,6 +40,7 @@ and approval of the exact canonical document digest. It first claims the approve
 `compiling`, stages generic handoff files and any typed initialization artifacts inside the run
 directory, then publishes the result before making the run terminal. Resume and result consumption
 finalize a complete interrupted transaction or discard its partial bundle and restore `approved`.
+A resume that reaches `compiled` emits the verified completion directly without reopening a canvas.
 Compilation never modifies the caller's project automatically.
 
 ## Run layout

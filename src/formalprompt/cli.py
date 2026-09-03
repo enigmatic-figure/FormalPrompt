@@ -170,6 +170,21 @@ def resume_command(
     store.read_document()
     store.read_state()
     recover_interrupted_compilation(store)
+    if store.read_state().get("status") == "compiled":
+        try:
+            _emit_lifecycle(_completed_payload(store), as_json)
+        except (ArtifactBundleError, OSError, ValueError) as exc:
+            _emit_lifecycle(
+                {
+                    "contract": "agent-canvas-session/v1",
+                    "event": "error",
+                    "run_id": store.run_id,
+                    "message": f"Compiled result verification failed: {exc}",
+                },
+                as_json,
+            )
+            raise typer.Exit(1) from None
+        return
     _serve_store(
         store,
         renderer=renderer,
@@ -395,7 +410,7 @@ def _serve_store(
     status = store.read_state().get("status")
     if status in {"compiling", "compiled"}:
         try:
-            completed = load_verified_result(store)
+            completed = _completed_payload(store)
         except (ArtifactBundleError, OSError, ValueError) as exc:
             _emit_lifecycle(
                 {
@@ -407,8 +422,12 @@ def _serve_store(
                 as_json,
             )
             raise typer.Exit(1) from None
-        completed = {"event": "completed", "run_directory": str(store.path.resolve()), **completed}
         _emit_lifecycle(completed, as_json)
+
+
+def _completed_payload(store: RunStore) -> dict:
+    result = load_verified_result(store)
+    return {"event": "completed", "run_directory": str(store.path.resolve()), **result}
 
 
 def _read_document(path: Path) -> CanvasDocument:

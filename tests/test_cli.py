@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from formalprompt.cli import app
@@ -237,3 +238,35 @@ def test_result_command_rejects_an_unverified_result_file(tmp_path):
 
     assert result.exit_code == 1
     assert "no verified compiled result" in result.stderr
+
+
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_resume_emits_terminal_completion_without_starting_server(
+    tmp_path, monkeypatch, interrupted
+):
+    store = RunStore.create(tmp_path, minimal_document(), run_id="terminal-run")
+    store.approve("CLI test", 0)
+    if interrupted:
+        original_mark_compiled = store.mark_compiled
+
+        def interrupt_after_publication(revision):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(store, "mark_compiled", interrupt_after_publication)
+        with pytest.raises(KeyboardInterrupt):
+            compile_run(store, 0)
+        monkeypatch.setattr(store, "mark_compiled", original_mark_compiled)
+    else:
+        compile_run(store, 0)
+
+    def fail_if_runtime_starts(*args, **kwargs):
+        raise AssertionError("Terminal resume must not start a canvas server")
+
+    monkeypatch.setattr("formalprompt.cli.CanvasRuntime", fail_if_runtime_starts)
+    result = runner.invoke(app, ["resume", str(store.path), "--renderer", "none", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["event"] == "completed"
+    assert payload["status"] == "compiled"
+    assert store.read_state()["status"] == "compiled"

@@ -81,6 +81,9 @@ Resume an interrupted run:
 uv run formalprompt resume .formalprompt/runs/<run-id> --renderer auto --json
 ```
 
+If recovery finds a complete published bundle, `resume` verifies and emits completion directly; it
+opens a canvas only for a nonterminal run.
+
 Read the final result without reopening the canvas:
 
 ```text
