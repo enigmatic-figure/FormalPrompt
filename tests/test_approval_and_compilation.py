@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
+from formalprompt.artifacts import verify_compiled_run
+from formalprompt.compiler import ApprovalRequired, compile_run, recover_interrupted_compilation
 from formalprompt.server import create_app
 from formalprompt.store import RunStore
 from tests.test_session_api import minimal_document
@@ -51,6 +54,7 @@ def test_approved_revision_compiles_to_a_hashed_handoff_bundle(tmp_path):
 
     assert approval.status_code == 200
     assert approval.json()["state"]["status"] == "approved"
+    assert len(approval.json()["state"]["approval"]["document_sha256"]) == 64
     assert compiled.status_code == 200
     result = compiled.json()
     assert result["contract"] == "agent-canvas-result/v1"
@@ -171,3 +175,51 @@ def test_edit_after_approval_invalidates_approval(tmp_path):
     assert edited.status_code == 200
     assert edited.json()["state"]["approval"] is None
     assert compile_response.status_code == 409
+
+
+def test_approval_is_bound_to_exact_document_contents(tmp_path):
+    store = RunStore.create(tmp_path, minimal_document())
+    store.approve("Local user", 0)
+    changed = store.read_document().model_dump(mode="json")
+    changed["tabs"][0]["sections"][0]["fields"][0]["value"] = "Silently changed"
+    (store.path / "document.json").write_text(json.dumps(changed), encoding="utf-8")
+
+    with pytest.raises(ApprovalRequired, match="contents have changed"):
+        compile_run(store, 0)
+
+    assert store.read_state()["status"] == "approved"
+
+
+def test_recovery_restores_incomplete_compilation_for_retry(tmp_path):
+    store = RunStore.create(tmp_path, minimal_document())
+    store.approve("Local user", 0)
+    store.begin_compilation(0)
+    artifacts = store.path / "artifacts"
+    artifacts.mkdir()
+    (artifacts / "partial.tmp").write_text("partial", encoding="utf-8")
+
+    action = recover_interrupted_compilation(store)
+
+    assert action == "restored-approved"
+    assert store.read_state()["status"] == "approved"
+    assert not artifacts.exists()
+    assert compile_run(store, 0)["status"] == "compiled"
+
+
+def test_recovery_finalizes_complete_bundle_published_before_state(tmp_path, monkeypatch):
+    store = RunStore.create(tmp_path, minimal_document())
+    store.approve("Local user", 0)
+    original_mark_compiled = store.mark_compiled
+    monkeypatch.setattr(
+        store, "mark_compiled", lambda revision: (_ for _ in ()).throw(KeyboardInterrupt())
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        compile_run(store, 0)
+
+    assert store.read_state()["status"] == "compiling"
+    monkeypatch.setattr(store, "mark_compiled", original_mark_compiled)
+    assert recover_interrupted_compilation(store) == "finalized-compiled"
+    assert store.read_state()["status"] == "compiled"
+    result, manifest = verify_compiled_run(store.path)
+    assert result["document_sha256"] == manifest["document_sha256"]

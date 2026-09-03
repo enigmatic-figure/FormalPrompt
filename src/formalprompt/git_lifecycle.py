@@ -54,6 +54,8 @@ def create_checkpoint(
     if not branch:
         raise GitLifecycleError("True Initialization cannot be tagged from a detached HEAD")
     remote = _git(repo, "remote", "get-url", "origin", allow_failure=True) or None
+    if push and remote is None:
+        raise GitLifecycleError("Cannot push checkpoint without an origin remote")
     checkpoint = {
         "contract": "formalprompt-initialization-checkpoint/v1",
         "tag": tag,
@@ -66,10 +68,12 @@ def create_checkpoint(
     message = json.dumps(checkpoint, ensure_ascii=False, separators=(",", ":"))
     _git(repo, "tag", "--annotate", tag, commit, "--message", message)
     if push:
-        if remote is None:
-            raise GitLifecycleError("Cannot push checkpoint without an origin remote")
-        _git(repo, "push", "origin", branch)
-        _git(repo, "push", "origin", f"refs/tags/{tag}")
+        try:
+            _git(repo, "push", "origin", branch)
+            _git(repo, "push", "origin", f"refs/tags/{tag}")
+        except GitLifecycleError:
+            _git(repo, "tag", "--delete", tag, allow_failure=True)
+            raise
     return checkpoint
 
 

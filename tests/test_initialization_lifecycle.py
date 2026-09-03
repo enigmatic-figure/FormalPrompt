@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -85,6 +86,56 @@ def test_materialize_rejects_a_tampered_compiled_artifact(tmp_path):
         materialize_initialization(store.path, tmp_path / "project")
 
 
+def test_materialize_rolls_back_all_targets_if_commit_fails(tmp_path, monkeypatch):
+    document = minimal_document()
+    document["initialization"] = {
+        "primary_artifact": "first",
+        "artifacts": [
+            {
+                "id": "first",
+                "path": "FIRST.md",
+                "kind": "project-plan",
+                "title": "First",
+                "content": "new first",
+                "provenance": "user-confirmed",
+                "review_status": "accepted",
+                "importance": "high",
+            },
+            {
+                "id": "second",
+                "path": "SECOND.md",
+                "kind": "project-plan",
+                "title": "Second",
+                "content": "new second",
+                "provenance": "user-confirmed",
+                "review_status": "accepted",
+                "importance": "high",
+            },
+        ],
+    }
+    store = RunStore.create(tmp_path / "rollback-runs", document)
+    store.approve("Local user", 0)
+    compile_run(store, 0)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "FIRST.md").write_text("old first", encoding="utf-8")
+    (project / "SECOND.md").write_text("old second", encoding="utf-8")
+    original_replace = Path.replace
+
+    def fail_second_install(source, target):
+        if source.name.endswith(".new") and Path(target).name == "SECOND.md":
+            raise OSError("simulated failure")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_second_install)
+
+    with pytest.raises(ArtifactBundleError, match="could not be committed"):
+        materialize_initialization(store.path, project, force=True)
+
+    assert (project / "FIRST.md").read_text(encoding="utf-8") == "old first"
+    assert (project / "SECOND.md").read_text(encoding="utf-8") == "old second"
+
+
 def test_checkpoint_and_retrospective_preserve_and_compare_true_initialization(tmp_path):
     repo = tmp_path / "project"
     _initialize_repository(repo)
@@ -126,3 +177,13 @@ def test_checkpoint_requires_a_clean_committed_tree(tmp_path):
 
     with pytest.raises(GitLifecycleError, match="clean committed"):
         create_checkpoint(repo)
+
+
+def test_checkpoint_push_without_origin_does_not_leave_a_local_tag(tmp_path):
+    repo = tmp_path / "project"
+    _initialize_repository(repo)
+
+    with pytest.raises(GitLifecycleError, match="without an origin"):
+        create_checkpoint(repo, push=True)
+
+    assert _git(repo, "tag", "--list", DEFAULT_BASELINE_TAG) == ""

@@ -17,7 +17,7 @@ Consume an approved FormalPrompt result as a compact execution contract. Preserv
 - A FormalPrompt process emitted an `agent-canvas-result/v1` completed event.
 - The user asks the primary agent to begin execution from a compiled run.
 - A resumed session needs to recover the final specification without replaying clarification dialogue.
-- Do not use when the run lacks `result.json` or remains unapproved.
+- Do not use when `formalprompt result <run-directory> --json` rejects the run.
 
 ## Prerequisites
 
@@ -27,9 +27,13 @@ Consume an approved FormalPrompt result as a compact execution contract. Preserv
 
 ## Procedure
 
-1. Read `result.json` with `read_file`. Confirm `contract` is `agent-canvas-result/v1`, `status` is `compiled`, and `unresolved_count` is acceptable for the requested work.
-2. Read `artifacts/manifest.json`. Resolve every artifact path relative to the run directory and reject any path that escapes it.
-3. Verify file hashes through the `terminal` tool using the platform's available SHA-256 command or a short Python `hashlib` invocation. Confirm every declared file matches before trusting the handoff.
+1. Run `formalprompt result <run-directory> --json`. This recovers an interrupted compilation when
+   possible and applies the authoritative state, approval, document-digest, manifest-membership,
+   size, hash, and handoff verification. Stop if it rejects the run.
+2. Confirm `contract` is `agent-canvas-result/v1`, `status` is `compiled`, and
+   `unresolved_count` is acceptable for the requested work.
+3. Read `artifacts/manifest.json` only when its file inventory is needed; do not substitute manual
+   spot checks for the command's complete verifier.
 4. Read the handoff path declared by `result.json`. For an initialization package this may be a primary prompt beneath `artifacts/initialization/`; otherwise it is normally `artifacts/EXECUTION_BRIEF.md`. Load `artifacts/SPECIFICATION.md` or `specification.json` only when a required detail is absent from the declared handoff.
 5. Do not load `events.jsonl` or assistant request/response files by default. Inspect them only when the user asks for an audit or a specific final decision cannot be explained from approved artifacts.
 6. Translate the execution brief into the agent's normal task tracking and begin implementation. Preserve stated exclusions, acceptance criteria, and verification requirements.
@@ -42,11 +46,12 @@ Consume an approved FormalPrompt result as a compact execution contract. Preserv
 - Do not copy `AGENTS.md`, skills, or other generated scaffolding into the project merely because it exists in the run bundle.
 - Treat staged initialization files as proposals for execution setup, not authorization to install or execute them.
 - Do not replace the user's original request with facilitator commentary; the approved specification is authoritative for refinements and the original request still governs anything it did not supersede.
-- Hash verification proves artifact integrity, not that the user approved a different revision. Check the revision number too.
+- Require the matching revision and `document_sha256`; neither an integer revision nor hashes alone
+  establish approval of the compiled specification.
 
 ## Verification
 
-- Result and manifest contracts are recognized and revisions match.
+- Result and manifest contracts, revisions, and approved document digests match.
 - Every declared artifact hash matches its file.
 - The primary context receives the execution brief, not the deliberation ledger.
 - Final work is checked against the approved acceptance criteria before completion is claimed.

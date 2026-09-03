@@ -113,3 +113,20 @@ def test_runtime_reports_carbonyl_that_exits_during_startup(tmp_path, monkeypatc
 
     with pytest.raises(LauncherUnavailable, match="status 127"):
         runtime.open_renderer()
+
+
+def test_runtime_serves_ipv6_loopback_when_available(tmp_path):
+    if not socket.has_ipv6:
+        pytest.skip("IPv6 is unavailable")
+    store = RunStore.create(tmp_path, minimal_document())
+    runtime = CanvasRuntime(store, token="token", host="::1", port=0, renderer="none")
+    try:
+        try:
+            runtime.start()
+        except RuntimeError as exc:
+            pytest.skip(f"IPv6 loopback is unavailable: {exc}")
+        assert runtime.base_url.startswith("http://[::1]:")
+        assert runtime.canvas_url.startswith("http://[::1]:")
+        assert runtime.wait_until_ready(timeout_seconds=5)
+    finally:
+        runtime.stop()

@@ -10,11 +10,13 @@ from contextlib import suppress
 
 import uvicorn
 
+from formalprompt.artifacts import ArtifactBundleError, verify_compiled_run
 from formalprompt.assistant import AssistantBackend
 from formalprompt.launchers import (
     LauncherUnavailable,
     Renderer,
     ResolvedRenderer,
+    build_base_url,
     build_canvas_url,
     choose_renderer,
     launch,
@@ -52,8 +54,7 @@ class CanvasRuntime:
 
     @property
     def base_url(self) -> str:
-        browser_host = "127.0.0.1" if self.host in {"0.0.0.0", "::"} else self.host
-        return f"http://{browser_host}:{self.port}"
+        return build_base_url(self.host, self.port)
 
     @property
     def canvas_url(self) -> str:
@@ -62,7 +63,8 @@ class CanvasRuntime:
     def start(self) -> None:
         if self._server_thread is not None:
             raise RuntimeError("Canvas runtime has already been started")
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        family = socket.AF_INET6 if ":" in self.host else socket.AF_INET
+        listener = socket.socket(family, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             listener.bind((self.host, self.port))
@@ -144,14 +146,12 @@ class CanvasRuntime:
     def _monitor_completion(self) -> None:
         while self._server is not None and not self._server.should_exit:
             try:
-                if (
-                    self.store.read_state()["status"] == "compiled"
-                    and (self.store.path / "result.json").is_file()
-                ):
+                if self.store.read_state()["status"] == "compiled":
+                    verify_compiled_run(self.store.path)
                     self._stop_renderer()
                     self._server.should_exit = True
                     return
-            except (OSError, ValueError):
+            except (ArtifactBundleError, OSError, ValueError):
                 return
             time.sleep(0.1)
 

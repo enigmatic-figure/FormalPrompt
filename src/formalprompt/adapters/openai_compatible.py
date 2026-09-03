@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -29,6 +30,11 @@ proposal was accepted. Use null for next_document when no replacement is needed.
 JSON in Markdown."""
 
 
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class OpenAICompatibleAssistant:
     def __init__(
         self,
@@ -43,6 +49,18 @@ class OpenAICompatibleAssistant:
         if not base_url or not model:
             raise ValueError("Both base_url and model are required")
         self.endpoint = _chat_endpoint(base_url)
+        parsed_endpoint = urllib.parse.urlsplit(self.endpoint)
+        if (
+            api_key
+            and parsed_endpoint.scheme != "https"
+            and parsed_endpoint.hostname
+            not in {
+                "localhost",
+                "127.0.0.1",
+                "::1",
+            }
+        ):
+            raise ValueError("Authenticated assistant endpoints must use HTTPS or loopback HTTP")
         self.model = model
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
@@ -71,7 +89,8 @@ class OpenAICompatibleAssistant:
             self.endpoint, data=encoded, headers=headers, method="POST"
         )
         try:
-            with urllib.request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+            opener = urllib.request.build_opener(_RejectRedirects())
+            with opener.open(http_request, timeout=self.timeout_seconds) as response:
                 raw = response.read(self.maximum_response_bytes + 1)
         except urllib.error.HTTPError as exc:
             raise AssistantProtocolError(f"Assistant endpoint returned HTTP {exc.code}") from exc

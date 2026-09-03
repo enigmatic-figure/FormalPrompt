@@ -16,8 +16,8 @@ The canonical state is the canvas document. The browser, facilitator, reviewer, 
 - Visible provenance, review state, importance, rationale, and blocker treatment.
 - Optimistic revisions, autosave, atomic JSON replacement, and append-only events.
 - Deterministic validation with crash-safe malformed-rule handling.
-- Revision-bound user approval and automatic approval invalidation after edits.
-- Terminal compiled runs and an atomic `approved -> compiling -> compiled` claim.
+- Revision-and-document-digest-bound approval with automatic invalidation after edits.
+- Recoverable `approved -> compiling -> compiled` transactions and strictly verified results.
 - Staged Markdown/JSON handoffs with SHA-256 manifest and machine-readable result.
 - Typed, editable initialization artifacts for primary prompts, agent definitions, skills,
   research requests, knowledge-base plans, and project plans.
@@ -26,6 +26,7 @@ The canonical state is the canvas document. The browser, facilitator, reviewer, 
 - Field assistance plus facilitator and adversarial whole-spec review.
 - User-accepted next-canvas proposals for iterative clarification or initialization composition.
 - Provider-neutral JSON command bridge and an OpenAI-compatible reference adapter.
+- Bounded subprocess output and redirect-safe authenticated provider requests.
 - A concrete ephemeral Muse runner adapter with schema-constrained responses.
 - Separate facilitator/composer and independent-reviewer command routes.
 - Optional revision-bound independent-review gating before user approval.
@@ -154,6 +155,7 @@ formalprompt retrospective [project-directory] [--baseline ...]
   result.json
   requests/
   responses/
+  failures/
   artifacts/
     specification.json
     SPECIFICATION.md
@@ -187,7 +189,9 @@ skills, prompts, or project files is an intentionally separate operation.
 - Assistant commands run without a shell and receive scoped JSON.
 - Model credentials remain in the host environment.
 - Assistant output cannot mutate canonical state automatically.
-- Compilation requires approval of the exact current revision.
+- Compilation requires approval of the exact current revision and canonical document digest.
+- Result, materialization, and handoff consumers verify terminal state, approval, document digest,
+  complete manifest membership, sizes, and hashes.
 
 This is a local preflight tool, not a multi-user network service. `--allow-remote` changes only the bind safeguard; production remote authentication and TLS are out of scope for v0.1.
 

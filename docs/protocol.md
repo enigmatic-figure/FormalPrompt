@@ -70,9 +70,13 @@ edit advances the revision and invalidates prior approval.
 
 ## Validation
 
-Structural validation checks protocol shape and types. Semantic validation checks unique IDs, option membership, required values, validation constraints, unresolved blockers, and conflicts.
+Structural validation checks protocol shape and types. Semantic validation checks unique IDs, option
+membership, required values, finite numeric inputs, bounded/non-nested regular-expression patterns,
+validation constraints, unresolved blockers, and conflicts.
 
-Readiness for approval requires no error-level semantic issues. Compilation additionally requires an approval record whose document revision equals the current revision.
+Readiness for approval requires no error-level semantic issues. Approval records the revision and
+SHA-256 digest of the canonical JSON document. Compilation recomputes both, so changing
+`document.json` outside the broker cannot reuse an earlier approval.
 
 `require_user_approval` is always true in v1. When `require_independent_review` is true, readiness
 also requires a critic response with `disposition: ready` and no replacement document, recorded for
@@ -147,10 +151,14 @@ A compiled run returns:
   "run_id": "...",
   "status": "compiled",
   "revision": 1,
+  "document_sha256": "...",
   "unresolved_count": 0,
   "artifacts": {},
   "handoff": "artifacts/initialization/prompts/PRIMARY_AGENT.md"
 }
 ```
 
-Paths are relative to the run directory in persisted manifests. CLI output may additionally include the absolute run-directory path.
+Paths are relative to the run directory in persisted manifests. A result is consumable only when
+state is terminal and the state approval, result, manifest, specification, current document, file
+membership, sizes, hashes, and declared handoff all verify. CLI output may additionally include the
+absolute run-directory path.

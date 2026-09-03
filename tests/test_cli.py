@@ -5,7 +5,9 @@ import json
 from typer.testing import CliRunner
 
 from formalprompt.cli import app
+from formalprompt.compiler import compile_run
 from formalprompt.launchers import LauncherUnavailable
+from formalprompt.store import RunStore
 from tests.test_session_api import minimal_document
 
 runner = CliRunner()
@@ -213,12 +215,25 @@ def test_open_command_emits_json_error_when_server_cannot_start(tmp_path, monkey
 
 
 def test_result_command_reads_persisted_completion(tmp_path):
-    run = tmp_path / "run-1"
-    run.mkdir()
-    expected = {"contract": "agent-canvas-result/v1", "status": "compiled"}
-    (run / "result.json").write_text(json.dumps(expected), encoding="utf-8")
+    store = RunStore.create(tmp_path, minimal_document(), run_id="run-1")
+    store.approve("CLI test", 0)
+    expected = compile_run(store, 0)
 
-    result = runner.invoke(app, ["result", str(run), "--json"])
+    result = runner.invoke(app, ["result", str(store.path), "--json"])
 
     assert result.exit_code == 0
     assert json.loads(result.stdout) == expected
+
+
+def test_result_command_rejects_an_unverified_result_file(tmp_path):
+    run = tmp_path / "run-1"
+    run.mkdir()
+    (run / "result.json").write_text(
+        json.dumps({"contract": "agent-canvas-result/v1", "status": "compiled"}),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["result", str(run), "--json"])
+
+    assert result.exit_code == 1
+    assert "no verified compiled result" in result.stderr

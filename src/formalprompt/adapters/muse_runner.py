@@ -10,7 +10,12 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from formalprompt.assistant import AssistantRequest, AssistantResponse
+from formalprompt.assistant import (
+    AssistantRequest,
+    AssistantResponse,
+    CommandOutputLimitExceeded,
+    run_bounded_command,
+)
 
 RUNNER_ENVIRONMENT = "FORMALPROMPT_MUSE_RUNNER"
 REPO_ENVIRONMENT = "FORMALPROMPT_MUSE_REPO"
@@ -73,16 +78,14 @@ def invoke_muse(request: AssistantRequest) -> AssistantResponse:
             str(prompt_path),
         ]
         try:
-            completed = subprocess.run(
+            completed = run_bounded_command(
                 command,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout + 30,
-                check=False,
+                "",
+                timeout_seconds=timeout + 30,
+                maximum_stdout_bytes=262_144,
+                maximum_stderr_bytes=262_144,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+        except (OSError, subprocess.TimeoutExpired, CommandOutputLimitExceeded) as exc:
             raise MuseRunnerAdapterError(f"Muse runner failed to execute: {exc}") from exc
 
     if completed.returncode != 0:

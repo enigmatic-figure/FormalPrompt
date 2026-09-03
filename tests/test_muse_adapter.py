@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-import subprocess
 
 from formalprompt.adapters.muse_runner import invoke_muse
-from formalprompt.assistant import AssistantRequest
+from formalprompt.assistant import AssistantRequest, BoundedCommandResult
 
 
 def test_muse_adapter_launches_fresh_read_only_schema_constrained_job(tmp_path, monkeypatch):
@@ -15,8 +14,9 @@ def test_muse_adapter_launches_fresh_read_only_schema_constrained_job(tmp_path, 
     result = tmp_path / "result.md"
     observed = {}
 
-    def fake_run(command, **options):
+    def fake_run(command, stdin_text, **options):
         observed["command"] = command
+        observed["stdin_text"] = stdin_text
         observed["options"] = options
         request_id = "compose-1"
         result.write_text(
@@ -33,14 +33,14 @@ def test_muse_adapter_launches_fresh_read_only_schema_constrained_job(tmp_path, 
             ),
             encoding="utf-8",
         )
-        return subprocess.CompletedProcess(
-            command, 0, stdout=f"Muse job completed; result: {result}\n", stderr=""
+        return BoundedCommandResult(
+            returncode=0, stdout=f"Muse job completed; result: {result}\n", stderr=""
         )
 
     monkeypatch.setenv("FORMALPROMPT_MUSE_RUNNER", str(runner))
     monkeypatch.setenv("FORMALPROMPT_MUSE_REPO", str(repo))
     monkeypatch.setenv("FORMALPROMPT_MUSE_TIMEOUT", "45")
-    monkeypatch.setattr("formalprompt.adapters.muse_runner.subprocess.run", fake_run)
+    monkeypatch.setattr("formalprompt.adapters.muse_runner.run_bounded_command", fake_run)
     request = AssistantRequest.model_validate(
         {
             "contract": "agent-canvas-assistant/v1",
@@ -57,4 +57,5 @@ def test_muse_adapter_launches_fresh_read_only_schema_constrained_job(tmp_path, 
     assert "--sandbox" in observed["command"]
     assert observed["command"][observed["command"].index("--sandbox") + 1] == "read-only"
     assert "--output-schema" in observed["command"]
-    assert observed["options"]["timeout"] == 75
+    assert observed["options"]["timeout_seconds"] == 75
+    assert observed["options"]["maximum_stdout_bytes"] == 262_144

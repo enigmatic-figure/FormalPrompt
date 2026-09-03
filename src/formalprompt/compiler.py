@@ -2,15 +2,55 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from contextlib import suppress
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from formalprompt.artifacts import (
+    ArtifactBundleError,
+    verify_compiled_run,
+    verify_staged_compilation,
+)
+from formalprompt.integrity import document_sha256
 from formalprompt.store import RevisionConflict, RunStore
 
 
 class ApprovalRequired(Exception):
     pass
+
+
+def recover_interrupted_compilation(store: RunStore) -> str:
+    """Finalize a complete staged bundle or restore an interrupted run to approved."""
+    state = store.read_state()
+    if state.get("status") != "compiling":
+        return "unchanged"
+    revision = state["revision"]
+    try:
+        verify_staged_compilation(store.path)
+    except (ArtifactBundleError, OSError, ValueError):
+        _discard_staged_compilation(store, revision)
+        store.append_event(
+            "compilation.recovered",
+            "system",
+            None,
+            {"revision": revision, "action": "restored-approved"},
+        )
+        return "restored-approved"
+    store.mark_compiled(revision)
+    store.append_event(
+        "compilation.recovered",
+        "system",
+        None,
+        {"revision": revision, "action": "finalized-compiled"},
+    )
+    return "finalized-compiled"
+
+
+def load_verified_result(store: RunStore) -> dict[str, Any]:
+    recover_interrupted_compilation(store)
+    result, _ = verify_compiled_run(store.path)
+    return result
 
 
 def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
@@ -21,6 +61,9 @@ def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
 
     try:
         document = store.read_document()
+        approved_document_sha256 = document_sha256(document)
+        if approval.get("document_sha256") != approved_document_sha256:
+            raise ApprovalRequired("The compiled document does not match the approved contents")
         artifacts = store.path / "artifacts"
         artifacts.mkdir(exist_ok=True)
 
@@ -58,6 +101,7 @@ def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
             "contract": "agent-canvas-manifest/v1",
             "run_id": store.run_id,
             "revision": expected_revision,
+            "document_sha256": approved_document_sha256,
             "files": files,
         }
         _atomic_write(
@@ -80,6 +124,7 @@ def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
             "run_id": store.run_id,
             "status": "compiled",
             "revision": expected_revision,
+            "document_sha256": approved_document_sha256,
             "unresolved_count": unresolved_count,
             "artifacts": files,
             "handoff": handoff,
@@ -92,8 +137,17 @@ def compile_run(store: RunStore, expected_revision: int) -> dict[str, Any]:
         return result
     except Exception:
         with suppress(OSError):
-            store.abort_compilation(expected_revision)
+            _discard_staged_compilation(store, expected_revision)
         raise
+
+
+def _discard_staged_compilation(store: RunStore, revision: int) -> None:
+    artifacts = store.path / "artifacts"
+    if artifacts.exists():
+        shutil.rmtree(artifacts)
+    for partial in (store.path / "result.json", store.path / "result.json.tmp"):
+        partial.unlink(missing_ok=True)
+    store.abort_compilation(revision)
 
 
 def _specification_markdown(document) -> str:

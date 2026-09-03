@@ -38,8 +38,17 @@ def choose_renderer(
 
 
 def build_canvas_url(host: str, port: int, token: str) -> str:
-    browser_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+    browser_host = _browser_host(host)
     return f"http://{browser_host}:{port}/#token={quote(token, safe='')}"
+
+
+def build_base_url(host: str, port: int) -> str:
+    return f"http://{_browser_host(host)}:{port}"
+
+
+def _browser_host(host: str) -> str:
+    browser_host = "127.0.0.1" if host == "0.0.0.0" else "::1" if host == "::" else host
+    return f"[{browser_host}]" if ":" in browser_host else browser_host
 
 
 def launch(

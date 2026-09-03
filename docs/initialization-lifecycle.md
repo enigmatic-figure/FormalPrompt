@@ -29,7 +29,8 @@ the implementation phase begins. FormalPrompt records it with the annotated Git 
 formalprompt materialize <run-directory> <project-directory>
 ```
 
-Materialization verifies the result, manifest, approval revision, artifact sizes, and SHA-256 hashes.
+Materialization verifies terminal state, result and manifest contracts, approval revision, canonical
+document digest, exact manifest membership, artifact sizes, SHA-256 hashes, and the declared handoff.
 It copies only entries beneath `artifacts/initialization/`, rejects paths that escape the target or
 enter Git/FormalPrompt internal directories, and refuses to replace existing files unless `--force`
 is explicit.

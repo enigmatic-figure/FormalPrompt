@@ -57,6 +57,28 @@ def test_command_assistant_rejects_non_protocol_output(tmp_path):
         )
 
 
+def test_command_assistant_stops_before_streams_can_exceed_memory_limit(tmp_path):
+    adapter = tmp_path / "flood-adapter.py"
+    adapter.write_text(
+        "import os\nos.write(1, b'x' * 5_000_000)\nos.write(2, b'y' * 5_000_000)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AssistantProtocolError, match="exceeded the configured size limit"):
+        CommandAssistant(
+            [sys.executable, str(adapter)],
+            maximum_output_bytes=1024,
+            maximum_error_bytes=1024,
+        ).invoke(
+            {
+                "contract": "agent-canvas-assistant/v1",
+                "request_id": "request-flood",
+                "operation": "field-assistance",
+                "context": {},
+            }
+        )
+
+
 def test_enabled_field_assistance_is_queued_without_a_backend(tmp_path):
     document = minimal_document()
     field = document["tabs"][0]["sections"][0]["fields"][0]
@@ -78,3 +100,29 @@ def test_enabled_field_assistance_is_queued_without_a_backend(tmp_path):
     assert saved["context"]["field"]["id"] == "project.goal"
     assert saved["context"]["question"] == "Show two sharper alternatives"
     assert "tabs" not in saved["context"]
+
+
+def test_assistant_failure_is_durably_recorded(tmp_path):
+    document = minimal_document()
+    field = document["tabs"][0]["sections"][0]["fields"][0]
+    field["assistance"] = {"enabled": True, "prompt": "Help"}
+    adapter = tmp_path / "bad-adapter.py"
+    adapter.write_text("print('not json')\n", encoding="utf-8")
+    store = RunStore.create(tmp_path / "runs", document)
+    client = TestClient(
+        create_app(store, token="token", assistant=CommandAssistant([sys.executable, str(adapter)]))
+    )
+
+    response = client.post(
+        "/api/assistance",
+        headers={"Authorization": "Bearer token"},
+        json={"field_id": "project.goal", "question": "Help"},
+    )
+
+    assert response.status_code == 502
+    failure_files = list((store.path / "failures").glob("*.json"))
+    assert len(failure_files) == 1
+    failure = json.loads(failure_files[0].read_text(encoding="utf-8"))
+    assert failure["operation"] == "field-assistance"
+    assert failure["error_type"] == "AssistantProtocolError"
+    assert '"type":"assistance.failed"' in (store.path / "events.jsonl").read_text(encoding="utf-8")

@@ -25,7 +25,8 @@ resulting diff and structured learning records to improve reusable initializatio
 ## Procedure
 
 1. Run `formalprompt materialize <run-directory> <project-directory>`. This verifies the compiled
-   manifest and approval revision before copying only `artifacts/initialization/**` paths. Inspect
+   manifest, approval revision, and approved document digest before copying only
+   `artifacts/initialization/**` paths. Inspect
    the resulting project diff before committing.
 2. Commit the complete candidate initialization state and publish that exact commit to the private
    development repository when independent review is requested. In this environment, private
@@ -51,7 +52,8 @@ resulting diff and structured learning records to improve reusable initializatio
 - Do not treat a private development push as a release publication.
 - Do not record generic implementation changes as initialization failures; use the learning ledger
   when an initialization artifact actually required correction.
-- Do not materialize a bundle whose hashes or approval revision fail verification.
+- Do not materialize a bundle whose terminal state, manifest membership, hashes, approval revision,
+  or approved document digest fail verification.
 
 ## Verification
 

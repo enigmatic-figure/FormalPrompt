@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from formalprompt.artifacts import ArtifactBundleError, materialize_initialization
 from formalprompt.assistant import CommandAssistant
+from formalprompt.compiler import load_verified_result, recover_interrupted_compilation
 from formalprompt.git_lifecycle import (
     DEFAULT_BASELINE_TAG,
     GitLifecycleError,
@@ -168,6 +169,7 @@ def resume_command(
     store = RunStore(run_directory.resolve())
     store.read_document()
     store.read_state()
+    recover_interrupted_compilation(store)
     _serve_store(
         store,
         renderer=renderer,
@@ -187,11 +189,12 @@ def result_command(
     run_directory: Annotated[Path, typer.Argument(exists=True, file_okay=False, readable=True)],
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    result_path = run_directory / "result.json"
-    if not result_path.is_file():
-        typer.echo("The run has no compiled result.", err=True)
-        raise typer.Exit(1)
-    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    store = RunStore(run_directory.resolve())
+    try:
+        payload = load_verified_result(store)
+    except (ArtifactBundleError, OSError, ValueError) as exc:
+        typer.echo(f"The run has no verified compiled result: {exc}", err=True)
+        raise typer.Exit(1) from None
     typer.echo(
         json.dumps(payload, ensure_ascii=False) if as_json else json.dumps(payload, indent=2)
     )
@@ -389,9 +392,21 @@ def _serve_store(
         raise typer.Exit(1) from None
     finally:
         runtime.stop()
-    result_path = store.path / "result.json"
-    if result_path.is_file():
-        completed = json.loads(result_path.read_text(encoding="utf-8"))
+    status = store.read_state().get("status")
+    if status in {"compiling", "compiled"}:
+        try:
+            completed = load_verified_result(store)
+        except (ArtifactBundleError, OSError, ValueError) as exc:
+            _emit_lifecycle(
+                {
+                    "contract": "agent-canvas-session/v1",
+                    "event": "error",
+                    "run_id": store.run_id,
+                    "message": f"Compiled result verification failed: {exc}",
+                },
+                as_json,
+            )
+            raise typer.Exit(1) from None
         completed = {"event": "completed", "run_directory": str(store.path.resolve()), **completed}
         _emit_lifecycle(completed, as_json)
 

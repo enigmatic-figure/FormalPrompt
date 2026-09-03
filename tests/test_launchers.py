@@ -46,3 +46,7 @@ def test_access_token_is_placed_in_fragment_not_query_string():
 
     assert url == "http://127.0.0.1:9341/#token=a%20secret%2Ftoken"
     assert "?" not in url
+
+
+def test_ipv6_canvas_url_uses_bracketed_host():
+    assert build_canvas_url("::1", 9341, "secret") == "http://[::1]:9341/#token=secret"

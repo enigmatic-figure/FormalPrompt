@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 
 from fastapi.testclient import TestClient
@@ -97,3 +98,25 @@ def test_invalid_candidate_value_is_not_persisted(tmp_path):
     assert response.status_code == 422
     assert store.read_state()["revision"] == 0
     assert store.read_document().fields()[0].value == "safe"
+
+
+def test_non_finite_number_is_rejected_before_json_handoff():
+    document = minimal_document()
+    field = document["tabs"][0]["sections"][0]["fields"][0]
+    field["type"] = "number"
+    field["value"] = math.inf
+
+    issues = validate_document(document)
+
+    assert {issue.code for issue in issues} == {"non-finite-number"}
+
+
+def test_nested_quantifier_pattern_is_rejected_without_evaluating_user_value():
+    document = minimal_document()
+    field = document["tabs"][0]["sections"][0]["fields"][0]
+    field["value"] = "a" * 100_000 + "!"
+    field["validation"] = {"pattern": "(a+)+$"}
+
+    issues = validate_document(document)
+
+    assert {issue.code for issue in issues} == {"unsafe-pattern"}

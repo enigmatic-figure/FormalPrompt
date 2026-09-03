@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from formalprompt.assistant import AssistantBackend, AssistantResponse
+from formalprompt.integrity import document_sha256
 from formalprompt.models import CanvasDocument
 from formalprompt.validation import (
     ValidationIssue,
@@ -25,6 +26,7 @@ PROPOSAL_DEFINITION_ERROR_CODES = {
     "duplicate-option",
     "missing-options",
     "invalid-pattern",
+    "unsafe-pattern",
     "invalid-length-range",
     "invalid-number-range",
     "invalid-type",
@@ -205,6 +207,7 @@ class RunStore:
                 "approved_by": approved_by,
                 "approved_at": _now(),
                 "revision": expected_revision,
+                "document_sha256": document_sha256(self.read_document()),
             }
             self._write_json("state.json", state)
             self.append_event(
@@ -230,6 +233,9 @@ class RunStore:
             approval = state.get("approval")
             if approval is None or approval.get("revision") != expected_revision:
                 raise RevisionConflict("The current document revision has not been approved")
+            current_digest = document_sha256(self.read_document())
+            if approval.get("document_sha256") != current_digest:
+                raise RevisionConflict("The approved document contents have changed")
             errors = [issue for issue in self.validation_issues() if issue.severity == "error"]
             if errors:
                 raise RevisionConflict("The approved revision no longer satisfies readiness checks")
@@ -304,7 +310,7 @@ class RunStore:
 
         if backend is None:
             return {"request_id": request_id, "status": "pending"}
-        response = backend.invoke(request)
+        response = self._invoke_backend(backend, request, "assistance", field_id)
         response_dir = self.path / "responses"
         response_dir.mkdir(exist_ok=True)
         self._write_json_path(response_dir / f"{request_id}.json", response.model_dump(mode="json"))
@@ -354,7 +360,7 @@ class RunStore:
 
         if backend is None:
             return {"request_id": request_id, "status": "pending"}
-        response = backend.invoke(request)
+        response = self._invoke_backend(backend, request, "review", None)
         response_dir = self.path / "responses"
         response_dir.mkdir(exist_ok=True)
         self._write_json_path(response_dir / f"{request_id}.json", response.model_dump(mode="json"))
@@ -409,7 +415,7 @@ class RunStore:
 
         if backend is None:
             return {"request_id": request_id, "status": "pending"}
-        response = backend.invoke(request)
+        response = self._invoke_backend(backend, request, "composition", None)
         response_dir = self.path / "responses"
         response_dir.mkdir(exist_ok=True)
         self._write_json_path(response_dir / f"{request_id}.json", response.model_dump(mode="json"))
@@ -515,6 +521,38 @@ class RunStore:
         }
         with (self.path / "events.jsonl").open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+    def _invoke_backend(
+        self,
+        backend: AssistantBackend,
+        request: dict[str, Any],
+        operation: str,
+        target: str | None,
+    ) -> AssistantResponse:
+        try:
+            return backend.invoke(request)
+        except Exception as exc:
+            failure = {
+                "contract": "agent-canvas-assistant-failure/v1",
+                "request_id": request["request_id"],
+                "operation": request["operation"],
+                "failed_at": _now(),
+                "error_type": type(exc).__name__,
+                "message": str(exc)[:1000],
+            }
+            failure_dir = self.path / "failures"
+            failure_dir.mkdir(exist_ok=True)
+            self._write_json_path(failure_dir / f"{request['request_id']}.json", failure)
+            self.append_event(
+                f"{operation}.failed",
+                "agent",
+                target,
+                {
+                    "request_id": request["request_id"],
+                    "error_type": type(exc).__name__,
+                },
+            )
+            raise
 
     def _read_json(self, name: str) -> dict[str, Any]:
         return self._read_json_path(self.path / name)
