@@ -74,8 +74,8 @@ def _execution_contract(graph: WorkflowGraph, resolved_resources: dict[str, dict
         "- Never widen a node's declared resources, tools, write scope, or authority silently.",
         "- An empty write scope is read-only. Mutating operations may write only within their "
         "declared scope; checkpoint uses only the pinned git-checkpoint capability.",
-        "- Record physical deviations and adaptations as execution evidence; do not rewrite the "
-        "approved graph.",
+        "- When a local intervention is worth later examination, append one sparse FormalPrompt "
+        "intervention marker; do not diagnose causes or rewrite the approved graph.",
         "- A review retry creates a new forward-only attempt from its remediation policy.",
         "",
         f"Maximum parallel nodes: {graph.policy.maximum_parallel_nodes}",

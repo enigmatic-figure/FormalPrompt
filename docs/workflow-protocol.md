@@ -2,13 +2,16 @@
 
 FormalPrompt's agent-workflow/v1 object is the user-editable execution blueprint inside an agent-canvas/v1 specification. It is declarative: the browser edits it, the broker validates it, and the compiler binds it to approved resources. It does not execute agents or commands.
 
-## Three separate planes
+## Sources of truth and correlation
 
 1. The specification records user intent, assumptions, constraints, and acceptance criteria.
 2. The approved workflow blueprint records the planned nodes, dependencies, authority, resources, checkpoints, and policies.
-3. A runtime execution record records attempts, outputs, evidence, review findings, and deviations.
+3. Git records changes and the harness session log records runtime activity and reasoning.
+4. A sparse intervention marker joins those sources when a local repair may merit later examination.
 
-The blueprint must not be rewritten to make runtime history look planned. Physical adaptations belong in the execution record and project history.
+The blueprint must not be rewritten to make runtime history look planned. FormalPrompt does not
+create a parallel narrative history: an intervention marker contains only correlation coordinates.
+Diagnosis and reusable-system recommendations belong to a later high-context audit.
 
 ## Resources
 
@@ -84,7 +87,7 @@ does not receive filesystem authority; it must use a separately pinned git-check
 
 ## Reviews and repair
 
-The declared graph remains acyclic even when a project expects review-repair iterations. A review node carries a maximum number of rounds, a repair template resource, and an exhaustion action. At runtime, each repair is a new forward-only attempt linked to the failed review. This preserves the immutable user-approved intent while retaining causal history.
+The declared graph remains acyclic even when a project expects review-repair iterations. A review node carries a maximum number of rounds, a repair template resource, and an exhaustion action. At runtime, each repair is a new forward-only attempt linked to the failed review. This preserves the immutable user-approved intent while Git and the harness session log retain what occurred.
 
 ## Compilation
 

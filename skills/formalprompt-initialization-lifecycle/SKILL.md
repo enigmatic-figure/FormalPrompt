@@ -10,15 +10,15 @@ metadata:
 
 # FormalPrompt Initialization Lifecycle Skill
 
-Preserve the reviewed initialization state separately from later project execution, then use the
-resulting diff and structured learning records to improve reusable initialization assets.
+Preserve the reviewed initialization state separately from later project execution, then make its
+Git comparison and sparse intervention bookmarks available to a separate high-context audit.
 
 ## When to Use
 
 - An approved FormalPrompt run produced prompts, agent definitions, skills, research requests, or
   governance files that should initialize a project.
 - The user requests independent GitHub-backed review of project initialization.
-- Execution forced a corrective change to an initialization artifact.
+- Execution required a local intervention worth correlating later.
 - The project is complete and needs comparison with its True Initialization state.
 - Do not use the checkpoint tag as a release tag or rewrite it to hide later changes.
 
@@ -36,22 +36,23 @@ resulting diff and structured learning records to improve reusable initializatio
 4. From a clean working tree, run `formalprompt checkpoint <project-directory> --push`. The default
    annotated tag is `formalprompt/true-initialization`. Supply `--run-directory` when a compiled run
    should be recorded in the tag annotation.
-5. During execution, when a prompt, skill, template, still, or governance weakness causes a
-   corrective change, run `formalprompt learn <project-directory> --artifact ... --problem ...
-   --adjustment ... --recommendation ... --evidence ...`. Commit the append-only
-   `.formalprompt-learning.jsonl` ledger with the correction.
-6. At completion, run `formalprompt retrospective <project-directory>`. Review both
+5. During execution, use the `formalprompt-intervention` skill when physical project state requires
+   a local intervention worth later examination. The execution agent records only the sparse marker.
+6. At completion, run `formalprompt audit-index <run-directory> --project <project-directory>
+   --session-log <session-log>` and `formalprompt retrospective <project-directory>`. Review the
+   index alongside
    `INITIALIZATION_RETROSPECTIVE.md` and `INITIALIZATION_RETROSPECTIVE.patch`.
-7. Apply confirmed lessons to the reusable initialization templates or assets as a separate,
-   reviewed change. Preserve the original True Initialization tag as historical evidence.
+7. Give these artifacts and the complete generating system to a separate high-context auditor.
+   Only that review should diagnose causes or recommend reusable-system changes. Preserve the
+   original True Initialization tag as historical evidence.
 
 ## Pitfalls
 
 - Do not checkpoint an uncommitted or pre-review state.
 - Do not force-move or recreate an existing True Initialization tag.
 - Do not treat a private development push as a release publication.
-- Do not record generic implementation changes as initialization failures; use the learning ledger
-  when an initialization artifact actually required correction.
+- Do not ask the project-execution agent for root-cause, categorization, or durability judgments.
+- Do not duplicate Git or session history in an explanatory runtime ledger.
 - Do not materialize a bundle whose terminal state, manifest membership, hashes, approval revision,
   or approved document digest fail verification.
 
@@ -61,5 +62,7 @@ resulting diff and structured learning records to improve reusable initializatio
 - The independent review and confirmed repairs are committed before checkpointing.
 - `formalprompt/true-initialization` resolves to the reviewed-and-repaired clean commit and exists on
   the private origin when `--push` was used.
+- The audit index points to intervention events, workflow nodes, session windows, and Git anchors
+  without copying or interpreting their histories.
 - The retrospective names the exact baseline and completion commits, includes a full patch, and
-  highlights initialization-sensitive changes plus structured learning records.
+  explicitly avoids causal conclusions.

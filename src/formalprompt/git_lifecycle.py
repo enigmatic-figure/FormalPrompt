@@ -9,8 +9,7 @@ from typing import Any
 from formalprompt.artifacts import verify_compiled_run
 
 DEFAULT_BASELINE_TAG = "formalprompt/true-initialization"
-LEARNING_LEDGER = ".formalprompt-learning.jsonl"
-SENSITIVE_NAMES = {"AGENTS.md", LEARNING_LEDGER}
+SENSITIVE_NAMES = {"AGENTS.md"}
 SENSITIVE_PREFIXES = (
     ".agents/",
     "assets/",
@@ -77,31 +76,6 @@ def create_checkpoint(
     return checkpoint
 
 
-def record_learning(
-    repository: Path,
-    *,
-    artifact: str,
-    problem: str,
-    adjustment: str,
-    recommendation: str,
-    evidence: str = "",
-) -> dict[str, Any]:
-    repo = _repository_root(repository)
-    record = {
-        "contract": "formalprompt-initialization-learning/v1",
-        "recorded_at": _now(),
-        "artifact": artifact,
-        "problem": problem,
-        "adjustment": adjustment,
-        "recommendation": recommendation,
-        "evidence": evidence,
-    }
-    ledger = repo / LEARNING_LEDGER
-    with ledger.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-    return record
-
-
 def create_retrospective(
     repository: Path,
     *,
@@ -132,23 +106,6 @@ def create_retrospective(
     patch = _git(repo, "diff", "--binary", baseline_commit, head, strip=False)
     changed = _parse_name_status(name_status)
     sensitive = [item for item in changed if _is_initialization_sensitive(item["path"])]
-    current_ledger = (
-        (repo / LEARNING_LEDGER).read_text(encoding="utf-8")
-        if (repo / LEARNING_LEDGER).is_file()
-        else ""
-    )
-    baseline_ledger = _git(
-        repo,
-        "show",
-        f"{baseline_commit}:{LEARNING_LEDGER}",
-        allow_failure=True,
-        strip=False,
-    )
-    if baseline_ledger and not current_ledger.startswith(baseline_ledger):
-        raise GitLifecycleError("Initialization learning ledger was rewritten instead of appended")
-    baseline_records = _parse_learning_ledger(baseline_ledger)
-    learning_records = _parse_learning_ledger(current_ledger)[len(baseline_records) :]
-
     report = _retrospective_markdown(
         baseline=baseline,
         baseline_commit=baseline_commit,
@@ -157,7 +114,6 @@ def create_retrospective(
         commits=commits,
         changed=changed,
         sensitive=sensitive,
-        learning_records=learning_records,
         patch_output=patch_output,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -171,7 +127,6 @@ def create_retrospective(
         "head": head,
         "changed_files": len(changed),
         "initialization_sensitive_files": len(sensitive),
-        "learning_records": len(learning_records),
         "report": str(output.resolve()),
         "patch": str(patch_output.resolve()),
     }
@@ -233,21 +188,6 @@ def _is_initialization_sensitive(path: str) -> bool:
     )
 
 
-def _parse_learning_ledger(value: str) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for line_number, line in enumerate(value.splitlines(), start=1):
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise GitLifecycleError(
-                f"Learning ledger contains invalid JSON on line {line_number}"
-            ) from exc
-        if record.get("contract") != "formalprompt-initialization-learning/v1":
-            raise GitLifecycleError(f"Learning ledger contract is invalid on line {line_number}")
-        records.append(record)
-    return records
-
-
 def _retrospective_markdown(
     *,
     baseline: str,
@@ -257,7 +197,6 @@ def _retrospective_markdown(
     commits: str,
     changed: list[dict[str, str]],
     sensitive: list[dict[str, str]],
-    learning_records: list[dict[str, Any]],
     patch_output: Path,
 ) -> str:
     lines = [
@@ -281,22 +220,6 @@ def _retrospective_markdown(
         lines.extend(f"- `{item['status']}` `{item['path']}`" for item in sensitive)
     else:
         lines.append("No prompt, skill, template, documentation, or governance files changed.")
-    lines.extend(["", "## Recorded initialization lessons", ""])
-    if learning_records:
-        for index, record in enumerate(learning_records, start=1):
-            lines.extend(
-                [
-                    f"### {index}. {record['artifact']}",
-                    "",
-                    f"- Problem: {record['problem']}",
-                    f"- Adjustment: {record['adjustment']}",
-                    f"- Recommended reusable change: {record['recommendation']}",
-                    f"- Evidence: {record.get('evidence') or '_Not recorded_'}",
-                    "",
-                ]
-            )
-    else:
-        lines.append("No structured initialization lessons were recorded.")
     lines.extend(["", "## Commits after True Initialization", "", "```text"])
     lines.append(commits or "No commits after the checkpoint.")
     lines.extend(["```", "", "## All changed files", ""])
@@ -307,11 +230,11 @@ def _retrospective_markdown(
     lines.extend(
         [
             "",
-            "## Follow-up",
+            "## Scope",
             "",
-            "Review each recorded lesson and sensitive-file diff. Apply confirmed improvements to "
-            "the reusable initialization assets in a separate reviewed change; do not rewrite the "
-            "True Initialization tag.",
+            "This report is a mechanically derived Git comparison. It does not diagnose causes, "
+            "attribute responsibility, or recommend reusable-system changes. Correlate it with the "
+            "FormalPrompt intervention audit index during a separate high-context review.",
             "",
         ]
     )

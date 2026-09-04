@@ -12,6 +12,7 @@ EXPECTED_SKILLS = {
     "formalprompt-facilitation",
     "formalprompt-handoff",
     "formalprompt-initialization-lifecycle",
+    "formalprompt-intervention",
 }
 
 

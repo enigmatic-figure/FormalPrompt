@@ -142,13 +142,14 @@ uv run formalprompt open canvas.json \
 ```text
 formalprompt validate <document> [--json]
 formalprompt template <minimal|software-project|workflow-project|formalprompt-self-hosting> <output>
-formalprompt schema <output>
+formalprompt schema <output> [--contract canvas|intervention|audit-index]
 formalprompt open <document> [--renderer ...] [--assistant-command ...] [--reviewer-command ...]
 formalprompt resume <run-directory> [--renderer ...] [--assistant-command ...] [--reviewer-command ...]
 formalprompt result <run-directory> [--json]
 formalprompt materialize <run-directory> <project-directory> [--force]
 formalprompt checkpoint [project-directory] [--run-directory ...] [--push]
-formalprompt learn [project-directory] --artifact ... --problem ... --adjustment ... --recommendation ...
+formalprompt intervene <run-directory> --node ... [--project ...] [--session-event ...]
+formalprompt audit-index <run-directory> [--project ...] [--session-log ...]
 formalprompt retrospective [project-directory] [--baseline ...]
 ```
 
@@ -163,6 +164,7 @@ formalprompt retrospective [project-directory] [--baseline ...]
   requests/
   responses/
   failures/
+  intervention-audit-index.json
   artifacts/
     specification.json
     SPECIFICATION.md
@@ -184,12 +186,16 @@ skills, prompts, or project files is an intentionally separate operation.
 - `skills/agent-canvas-authoring/SKILL.md` — construct, validate, and launch canvases.
 - `skills/formalprompt-facilitation/SKILL.md` — operate behind the isolated JSON bridge.
 - `skills/formalprompt-handoff/SKILL.md` — consume compact results without importing deliberation.
-- `skills/formalprompt-initialization-lifecycle/SKILL.md` — preserve True Initialization, record
-  corrections, and compare completion with the reviewed baseline.
+- `skills/formalprompt-initialization-lifecycle/SKILL.md` — preserve True Initialization, collect
+  intervention bookmarks, and compare completion with the reviewed baseline.
+- `skills/formalprompt-intervention/SKILL.md` — mark a local intervention without diagnosing or
+  duplicating its surrounding history.
 - `skills/agent-workflow-authoring/SKILL.md` — compose typed resource-backed project DAGs.
 - `skills/agent-workflow-execution/SKILL.md` — execute a verified DAG without importing
   initialization deliberation or silently rewriting intent.
 - `schemas/agent-canvas-v1.schema.json` — generated protocol schema.
+- `formalprompt schema --contract intervention|audit-index` — generate strict schemas for sparse
+  runtime correlation artifacts.
 - `examples/formalprompt-project.json` — this project expressed in its own canvas.
 
 ## Security model
@@ -234,4 +240,4 @@ The Chrome integration test runs automatically when Chrome-family browser and No
 See `docs/protocol.md`, `docs/workflow-protocol.md`, `docs/architecture.md`,
 `docs/browser-renderers.md`, and `docs/assistant-adapters.md` for normative details.
 See `docs/initialization-lifecycle.md` for private review publication, checkpointing, and the
-post-execution learning loop.
+post-execution audit handoff.

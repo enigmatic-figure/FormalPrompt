@@ -133,6 +133,7 @@ the run directory and external agent processes. A handoff contains the final exe
 artifact manifest, unresolved-item count, approval revision, approved document digest, and
 paths—not the full transcript.
 
-The approved workflow and runtime evidence are separate planes. Execution may record forward-only
-repair attempts and physical deviations, but it must never rewrite the approved graph to make
-history appear planned.
+The approved workflow, Git history, and harness session log remain the sources of truth for intent,
+changes, and execution. A material local intervention adds only a sparse correlation marker to the
+existing run event stream. It must never rewrite the approved graph, duplicate those histories, or
+make a causal or upstream-policy judgment from the project-execution context.

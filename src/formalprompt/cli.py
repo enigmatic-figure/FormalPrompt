@@ -18,7 +18,13 @@ from formalprompt.git_lifecycle import (
     GitLifecycleError,
     create_checkpoint,
     create_retrospective,
-    record_learning,
+)
+from formalprompt.interventions import (
+    InterventionAuditIndex,
+    InterventionError,
+    InterventionMarker,
+    collect_audit_index,
+    record_intervention,
 )
 from formalprompt.launchers import LauncherUnavailable
 from formalprompt.models import CanvasDocument
@@ -37,6 +43,11 @@ TEMPLATES = {
     "minimal": TEMPLATE_DIRECTORY / "minimal.json",
     "software-project": TEMPLATE_DIRECTORY / "software-project.json",
     "workflow-project": TEMPLATE_DIRECTORY / "workflow-project.json",
+}
+SCHEMA_MODELS = {
+    "canvas": CanvasDocument,
+    "intervention": InterventionMarker,
+    "audit-index": InterventionAuditIndex,
 }
 
 
@@ -87,12 +98,23 @@ def template_command(
 def schema_command(
     output: Annotated[Path, typer.Argument(dir_okay=False)],
     force: Annotated[bool, typer.Option("--force", help="Replace an existing file.")] = False,
+    contract: Annotated[
+        str,
+        typer.Option(
+            "--contract",
+            help="Schema contract: canvas, intervention, or audit-index.",
+        ),
+    ] = "canvas",
 ) -> None:
     if output.exists() and not force:
         raise typer.BadParameter(f"Output already exists: {output}")
+    model = SCHEMA_MODELS.get(contract)
+    if model is None:
+        choices = ", ".join(sorted(SCHEMA_MODELS))
+        raise typer.BadParameter(f"Unknown schema contract {contract!r}. Available: {choices}")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
-        json.dumps(CanvasDocument.model_json_schema(), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(model.model_json_schema(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -265,36 +287,66 @@ def checkpoint_command(
     _emit_object(payload, as_json)
 
 
-@app.command("learn")
-def learn_command(
-    repository: Annotated[Path, typer.Argument(exists=True, file_okay=False)] = Path("."),
-    artifact: Annotated[
-        str, typer.Option("--artifact", help="Prompt, skill, template, or governance artifact.")
-    ] = ...,
-    problem: Annotated[str, typer.Option("--problem", help="Observed behavioral weakness.")] = ...,
-    adjustment: Annotated[
-        str, typer.Option("--adjustment", help="Correction made during execution.")
-    ] = ...,
-    recommendation: Annotated[
-        str,
-        typer.Option("--recommendation", help="Reusable initialization improvement to consider."),
-    ] = ...,
-    evidence: Annotated[
-        str, typer.Option("--evidence", help="Optional verification evidence.")
-    ] = "",
+@app.command("intervene")
+def intervene_command(
+    run_directory: Annotated[Path, typer.Argument(exists=True, file_okay=False, readable=True)],
+    graph_node: Annotated[str, typer.Option("--node", help="Active approved workflow node.")],
+    repository: Annotated[
+        Path,
+        typer.Option("--project", exists=True, file_okay=False, help="Project Git repository."),
+    ] = Path("."),
+    session_event: Annotated[
+        str | None,
+        typer.Option(
+            "--session-event",
+            help="Existing session-log correlation ID; otherwise one is generated.",
+        ),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     try:
-        payload = record_learning(
-            repository,
-            artifact=artifact,
-            problem=problem,
-            adjustment=adjustment,
-            recommendation=recommendation,
-            evidence=evidence,
+        payload = record_intervention(
+            run_directory,
+            graph_node=graph_node,
+            repository=repository,
+            session_event=session_event or os.environ.get("FORMALPROMPT_SESSION_EVENT"),
         )
-    except GitLifecycleError as exc:
-        typer.echo(f"Initialization learning record failed: {exc}", err=True)
+    except InterventionError as exc:
+        typer.echo(f"Intervention flag failed: {exc}", err=True)
+        raise typer.Exit(1) from None
+    _emit_object(payload, as_json)
+
+
+@app.command("audit-index")
+def audit_index_command(
+    run_directory: Annotated[Path, typer.Argument(exists=True, file_okay=False, readable=True)],
+    repository: Annotated[
+        Path,
+        typer.Option("--project", exists=True, file_okay=False, help="Project Git repository."),
+    ] = Path("."),
+    session_log: Annotated[
+        Path | None,
+        typer.Option("--session-log", exists=True, dir_okay=False, readable=True),
+    ] = None,
+    output: Annotated[Path | None, typer.Option("--output", dir_okay=False)] = None,
+    window_lines: Annotated[
+        int,
+        typer.Option("--window-lines", min=0, help="Line radius around each session anchor."),
+    ] = 12,
+    force: Annotated[bool, typer.Option("--force")] = False,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    try:
+        payload = collect_audit_index(
+            run_directory,
+            repository=repository,
+            session_log=session_log,
+            output=output,
+            window_lines=window_lines,
+            force=force,
+        )
+    except InterventionError as exc:
+        typer.echo(f"Intervention audit index failed: {exc}", err=True)
         raise typer.Exit(1) from None
     _emit_object(payload, as_json)
 

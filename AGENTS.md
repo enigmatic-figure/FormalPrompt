@@ -14,11 +14,12 @@
 3. Run independent review, repair confirmed findings, and obtain a closure review.
 4. Tag the clean reviewed-and-repaired commit as the project's True Initialization checkpoint.
 5. Perform project execution after that tag.
-6. When execution exposes a weakness in an initialization prompt, skill, template, still, or
-   governance file, record the problem and corrective adjustment in the initialization learning
-   ledger when practical.
-7. At project completion, generate a retrospective diff from the True Initialization tag and use
-   confirmed lessons to improve the reusable initialization assets in a separate reviewed change.
+6. When physical project state requires a local intervention worth later examination, invoke the
+   FormalPrompt intervention skill. Record only its sparse correlation marker; do not diagnose the
+   generating system or recommend an upstream change from the execution context.
+7. At project completion, generate the intervention audit index and the mechanically derived diff
+   from the True Initialization tag. Reserve causal analysis and reusable-system changes for a
+   separate high-context review with the complete generating system available.
 
 The checkpoint is a comparison baseline, not a release tag. The release account and release process
 remain outside agent access.

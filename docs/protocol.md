@@ -151,8 +151,8 @@ rejected.
 
 A ready initialization may also carry an `agent-workflow/v1` object. It is an acyclic, typed,
 resource-referenced blueprint that the user can inspect and edit before approval. See
-`docs/workflow-protocol.md` for its node kinds, invariants, compilation contract, and separation
-from runtime evidence.
+`docs/workflow-protocol.md` for its node kinds, invariants, compilation contract, and sparse
+intervention-correlation model.
 
 Assistant failures are recorded and returned as failures; they never block ordinary editing or
 corrupt the canonical document.

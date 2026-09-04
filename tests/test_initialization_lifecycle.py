@@ -13,7 +13,6 @@ from formalprompt.git_lifecycle import (
     GitLifecycleError,
     create_checkpoint,
     create_retrospective,
-    record_learning,
 )
 from formalprompt.store import RunStore
 from tests.test_session_api import minimal_document
@@ -148,25 +147,18 @@ def test_checkpoint_and_retrospective_preserve_and_compare_true_initialization(t
     assert json.loads(annotation)["contract"] == "formalprompt-initialization-checkpoint/v1"
 
     (repo / "AGENTS.md").write_text("# Improved rules\n", encoding="utf-8")
-    record_learning(
-        repo,
-        artifact="AGENTS.md",
-        problem="The execution agent changed files outside its owned subsystem.",
-        adjustment="Added explicit file ownership boundaries.",
-        recommendation="Teach initialization templates to assign artifact ownership.",
-        evidence="The corrected run completed without overlapping edits.",
-    )
-    _git(repo, "add", "AGENTS.md", ".formalprompt-learning.jsonl")
+    _git(repo, "add", "AGENTS.md")
     _git(repo, "commit", "-m", "Correct execution governance")
     report = repo / "INITIALIZATION_RETROSPECTIVE.md"
     patch = repo / "INITIALIZATION_RETROSPECTIVE.patch"
 
     result = create_retrospective(repo, output=report, patch_output=patch)
 
-    assert result["changed_files"] == 2
-    assert result["initialization_sensitive_files"] == 2
-    assert result["learning_records"] == 1
-    assert "Teach initialization templates" in report.read_text(encoding="utf-8")
+    assert result["changed_files"] == 1
+    assert result["initialization_sensitive_files"] == 1
+    report_content = report.read_text(encoding="utf-8")
+    assert "mechanically derived Git comparison" in report_content
+    assert "recommend reusable-system changes" in report_content
     assert "AGENTS.md" in patch.read_text(encoding="utf-8")
 
 

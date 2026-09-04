@@ -1,8 +1,8 @@
 # Initialization lifecycle
 
-FormalPrompt separates project initialization from project execution so teams can inspect what the
-initialization process got right, what execution later had to correct, and which reusable assets
-should improve.
+FormalPrompt separates project initialization from project execution. Runtime capture is limited to
+correlation bookmarks; causal analysis belongs to a later review that can see the complete generating
+system.
 
 ## Lifecycle
 
@@ -13,10 +13,10 @@ CANVAS ITERATION
   -> PRIVATE DEVELOPMENT COMMIT
   -> INDEPENDENT REVIEW + CONFIRMED REPAIRS
   -> TRUE INITIALIZATION TAG
-  -> PROJECT EXECUTION + LEARNING RECORDS
+  -> PROJECT EXECUTION + SPARSE INTERVENTION FLAGS
   -> COMPLETION COMMIT
-  -> RETROSPECTIVE REPORT + FULL DIFF
-  -> SEPARATE IMPROVEMENT TO REUSABLE ASSETS
+  -> AUDIT INDEX + FULL GIT DIFF
+  -> SEPARATE HIGH-CONTEXT CAUSAL REVIEW
 ```
 
 The True Initialization checkpoint is the clean commit after independent review and repair, before
@@ -52,22 +52,37 @@ The command requires a clean committed working tree, annotates the tag with the 
 origin, timestamp, and optional FormalPrompt run identity, then optionally pushes the branch and tag.
 It refuses to replace an existing checkpoint tag.
 
-## Capture corrections during execution
+## Mark a local intervention
 
-Record a learning only when project execution demonstrates that an initialization artifact needed a
-behavioral correction:
+When physical project state requires a local repair or adaptation worth examining later, identify
+the active approved graph node and invoke the intervention skill:
 
 ```text
-formalprompt learn <project-directory> \
-  --artifact AGENTS.md \
-  --problem "Two agents edited the same subsystem" \
-  --adjustment "Assigned non-overlapping file ownership" \
-  --recommendation "Make ownership mandatory in generated worker prompts" \
-  --evidence "The repaired run completed without conflicts"
+formalprompt intervene <run-directory> \
+  --node implement \
+  --project <project-directory> \
+  --json
 ```
 
-Records append to `.formalprompt-learning.jsonl`. Commit the ledger alongside the corrective change.
-Ordinary implementation changes are not initialization learnings.
+This appends `formalprompt-intervention-flag/v1` to the run's existing event stream. The marker holds
+only the run, graph node, session correlation ID, Git head, skill version, and timestamp. It contains
+no diagnosis, category, narrative, or upstream recommendation. Git preserves what changed, the
+session log preserves execution, and the approved graph preserves intended context and authority.
+
+## Build the audit index
+
+At completion, create a compact index:
+
+```text
+formalprompt audit-index <run-directory> \
+  --project <project-directory> \
+  --session-log <session-log>
+```
+
+The collector locates intervention flags and records pointers to their event lines, approved graph
+nodes and resources, bounded session-log line ranges, Git commits and diff ranges, and the immutable
+initialization sources. It deliberately does not copy session windows or Git diffs into another
+history and makes no causal claim. Run it with `--force` only to refresh an existing index.
 
 ## Compare completion with initialization
 
@@ -79,10 +94,12 @@ formalprompt retrospective <project-directory>
 
 The command verifies that True Initialization is an ancestor of the completion commit and writes:
 
-- `INITIALIZATION_RETROSPECTIVE.md`: commits, file summary, structured lessons, and highlighted
+- `INITIALIZATION_RETROSPECTIVE.md`: commits, file summary, and highlighted
   changes to prompts, skills, templates, stills, assets, Markdown, and agent-governance files.
 - `INITIALIZATION_RETROSPECTIVE.patch`: the complete binary-safe Git diff from True Initialization
   to completion.
 
-The learning ledger must remain append-only. Confirmed improvements belong in a new reviewed change
-to the reusable initialization system; never move the historical checkpoint to make the diff smaller.
+The report is a mechanically derived Git comparison, not a diagnosis. A later high-context auditor
+can correlate it with the intervention index, session logs, approved graph, initialized artifacts,
+model assignments, and complete generating system. Never move the historical checkpoint to make the
+diff smaller.

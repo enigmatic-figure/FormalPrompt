@@ -75,6 +75,33 @@ def test_schema_command_writes_protocol_schema(tmp_path):
     assert schema["additionalProperties"] is False
 
 
+def test_schema_command_writes_strict_intervention_contracts(tmp_path):
+    for contract, title in (
+        ("intervention", "InterventionMarker"),
+        ("audit-index", "InterventionAuditIndex"),
+    ):
+        output = tmp_path / f"{contract}.schema.json"
+        result = runner.invoke(
+            app,
+            ["schema", str(output), "--contract", contract],
+        )
+        assert result.exit_code == 0
+        schema = json.loads(output.read_text(encoding="utf-8"))
+        assert schema["title"] == title
+        assert schema["additionalProperties"] is False
+        if contract == "intervention":
+            assert set(schema["properties"]) == {
+                "contract",
+                "run_id",
+                "graph_node",
+                "session_event",
+                "git_head",
+                "skill_version",
+                "timestamp",
+            }
+            assert set(schema["required"]) == set(schema["properties"])
+
+
 def test_open_command_creates_run_and_emits_ready_event(tmp_path, monkeypatch):
     document_path = tmp_path / "canvas.json"
     document_path.write_text(json.dumps(minimal_document()), encoding="utf-8")
