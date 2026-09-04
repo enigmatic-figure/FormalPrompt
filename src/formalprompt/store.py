@@ -104,6 +104,7 @@ class RunStore:
                 review is None
                 or review.get("status") != "passed"
                 or review.get("revision") != state["revision"]
+                or review.get("document_sha256") != document_sha256(document)
             ):
                 issues.append(independent_review_issue())
         return issues
@@ -411,6 +412,7 @@ class RunStore:
             self._ensure_editable(self.read_state())
             document = self.read_document()
             revision = self.read_state()["revision"]
+            reviewed_document_sha256 = document_sha256(document)
             request_id = uuid4().hex
             request = {
                 "contract": "agent-canvas-assistant/v1",
@@ -420,6 +422,7 @@ class RunStore:
                     "role": role,
                     "focus": focus,
                     "revision": revision,
+                    "document_sha256": reviewed_document_sha256,
                     "document": document.model_dump(mode="json"),
                 },
             }
@@ -439,7 +442,13 @@ class RunStore:
         response_dir = self.path / "responses"
         response_dir.mkdir(exist_ok=True)
         self._write_json_path(response_dir / f"{request_id}.json", response.model_dump(mode="json"))
-        review_applied = self._record_review_outcome(request_id, role, revision, response)
+        review_applied = self._record_review_outcome(
+            request_id,
+            role,
+            revision,
+            reviewed_document_sha256,
+            response,
+        )
         self.append_event(
             "review.completed",
             "agent",
@@ -561,18 +570,24 @@ class RunStore:
         request_id: str,
         role: str,
         source_revision: int,
+        reviewed_document_sha256: str,
         response: AssistantResponse,
     ) -> bool:
         if role != "critic":
             return False
         with self._lock:
             state = self.read_state()
-            if state["revision"] != source_revision or state["status"] in {"compiling", "compiled"}:
+            if (
+                state["revision"] != source_revision
+                or state["status"] in {"compiling", "compiled"}
+                or document_sha256(self.read_document()) != reviewed_document_sha256
+            ):
                 return False
             passed = response.disposition == "ready" and response.next_document is None
             state["independent_review"] = {
                 "status": "passed" if passed else "changes-requested",
                 "revision": source_revision,
+                "document_sha256": reviewed_document_sha256,
                 "request_id": request_id,
                 "reviewed_at": _now(),
                 "summary": response.summary,

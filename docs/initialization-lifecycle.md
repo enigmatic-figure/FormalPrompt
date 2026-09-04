@@ -83,6 +83,8 @@ The collector locates intervention flags and records pointers to their event lin
 nodes and resources, bounded session-log line ranges, Git commits and diff ranges, and the immutable
 initialization sources. It deliberately does not copy session windows or Git diffs into another
 history and makes no causal claim. Run it with `--force` only to refresh an existing index.
+When a session log is supplied, collection fails if any marker's correlation ID is absent; an
+incomplete session bookmark is never published as a successful index.
 
 ## Compare completion with initialization
 

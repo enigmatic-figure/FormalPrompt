@@ -11,6 +11,8 @@ from formalprompt.compiler import compile_run
 from formalprompt.git_lifecycle import (
     DEFAULT_BASELINE_TAG,
     GitLifecycleError,
+    _is_initialization_sensitive_change,
+    _parse_name_status,
     create_checkpoint,
     create_retrospective,
 )
@@ -179,3 +181,52 @@ def test_checkpoint_push_without_origin_does_not_leave_a_local_tag(tmp_path):
         create_checkpoint(repo, push=True)
 
     assert _git(repo, "tag", "--list", DEFAULT_BASELINE_TAG) == ""
+
+
+def test_nul_name_status_parser_preserves_unusual_paths_and_rename_sources():
+    raw = (
+        "M\0docs/tab\tname.md\0"
+        "A\0docs/line\nname.md\0"
+        "A\0docs/café.md\0"
+        "R100\0docs/renamed-from.md\0renamed.bin\0"
+    )
+
+    changes = _parse_name_status(raw)
+
+    assert [change["path"] for change in changes[:3]] == [
+        "docs/tab\tname.md",
+        "docs/line\nname.md",
+        "docs/café.md",
+    ]
+    assert changes[3] == {
+        "status": "R100",
+        "old_path": "docs/renamed-from.md",
+        "path": "renamed.bin",
+    }
+    assert all(_is_initialization_sensitive_change(change) for change in changes)
+
+
+def test_retrospective_handles_non_ascii_paths_and_sensitive_rename_sources(tmp_path):
+    repo = tmp_path / "project"
+    _initialize_repository(repo)
+    docs = repo / "docs"
+    docs.mkdir()
+    renamed_from = docs / "rename-from.md"
+    renamed_from.write_text("kept\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "Add rename source")
+    create_checkpoint(repo)
+
+    renamed_from.rename(repo / "renamed.bin")
+    (docs / "café.md").write_text("changed\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "Exercise unusual paths")
+
+    result = create_retrospective(
+        repo,
+        output=repo / "RETROSPECTIVE.md",
+        patch_output=repo / "RETROSPECTIVE.patch",
+    )
+
+    assert result["changed_files"] == 2
+    assert result["initialization_sensitive_files"] == 2

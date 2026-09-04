@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import threading
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -122,12 +125,19 @@ def run_bounded_command(
     maximum_stderr_bytes: int,
 ) -> BoundedCommandResult:
     """Run a child while bounding both captured streams before they enter memory."""
+    group_options: dict[str, Any]
+    if os.name == "nt":
+        group_options = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    else:
+        group_options = {"start_new_session": True}
     process = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        **group_options,
     )
+    windows_job = _attach_windows_job(process) if os.name == "nt" else None
     stdout = bytearray()
     stderr = bytearray()
     exceeded = threading.Event()
@@ -176,15 +186,22 @@ def run_bounded_command(
 
     deadline = time.monotonic() + timeout_seconds
     timed_out = False
+    tree_terminated = False
     while process.poll() is None:
         if exceeded.wait(timeout=0.02):
-            process.kill()
+            _terminate_process_tree(process, windows_job)
+            tree_terminated = True
             break
         if time.monotonic() >= deadline:
             timed_out = True
-            process.kill()
+            _terminate_process_tree(process, windows_job)
+            tree_terminated = True
             break
+    if exceeded.is_set() and not tree_terminated:
+        _terminate_process_tree(process, windows_job)
     process.wait()
+    if windows_job is not None:
+        windows_job.close()
     for thread in threads:
         thread.join(timeout=1)
     if timed_out:
@@ -196,3 +213,109 @@ def run_bounded_command(
         stdout=stdout.decode("utf-8", errors="replace"),
         stderr=stderr.decode("utf-8", errors="replace"),
     )
+
+
+def _terminate_process_tree(process: subprocess.Popen, windows_job=None) -> None:
+    """Terminate the complete subprocess invocation after a bounded failure."""
+    if os.name == "nt":
+        if windows_job is not None and windows_job.terminate():
+            return
+        completed = subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode != 0 and process.poll() is None:
+            process.kill()
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + 0.25
+    while process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    with suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGKILL)
+
+
+def _attach_windows_job(process: subprocess.Popen):
+    """Attach a Windows process to a kill-on-close job, falling back when unavailable."""
+    try:
+        return _WindowsJob(process)
+    except OSError:
+        return None
+
+
+class _WindowsJob:
+    def __init__(self, process: subprocess.Popen):
+        import ctypes
+        from ctypes import wintypes
+
+        class IoCounters(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_ulonglong),
+                ("WriteOperationCount", ctypes.c_ulonglong),
+                ("OtherOperationCount", ctypes.c_ulonglong),
+                ("ReadTransferCount", ctypes.c_ulonglong),
+                ("WriteTransferCount", ctypes.c_ulonglong),
+                ("OtherTransferCount", ctypes.c_ulonglong),
+            ]
+
+        class BasicLimitInformation(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_longlong),
+                ("PerJobUserTimeLimit", ctypes.c_longlong),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class ExtendedLimitInformation(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", BasicLimitInformation),
+                ("IoInfo", IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        self._ctypes = ctypes
+        self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self._kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        self._kernel32.SetInformationJobObject.restype = wintypes.BOOL
+        self._kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+        self._kernel32.TerminateJobObject.restype = wintypes.BOOL
+        self._kernel32.CloseHandle.restype = wintypes.BOOL
+        self._handle = self._kernel32.CreateJobObjectW(None, None)
+        if not self._handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        information = ExtendedLimitInformation()
+        information.BasicLimitInformation.LimitFlags = 0x00002000
+        configured = self._kernel32.SetInformationJobObject(
+            self._handle,
+            9,
+            ctypes.byref(information),
+            ctypes.sizeof(information),
+        )
+        assigned = configured and self._kernel32.AssignProcessToJobObject(
+            self._handle,
+            int(process._handle),
+        )
+        if not assigned:
+            error = ctypes.get_last_error()
+            self.close()
+            raise ctypes.WinError(error)
+
+    def terminate(self) -> bool:
+        return bool(self._handle and self._kernel32.TerminateJobObject(self._handle, 1))
+
+    def close(self) -> None:
+        if self._handle:
+            self._kernel32.CloseHandle(self._handle)
+            self._handle = None

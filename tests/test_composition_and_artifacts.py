@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 
+import pytest
 from fastapi.testclient import TestClient
 
 from formalprompt.assistant import AssistantResponse
 from formalprompt.server import create_app
-from formalprompt.store import RunStore
+from formalprompt.store import RunStore, ValidationFailed
 from tests.test_session_api import minimal_document
 
 
@@ -132,6 +134,26 @@ class ClarificationComposer:
                 "next_document": document,
             }
         )
+
+
+def test_critic_pass_is_bound_to_the_reviewed_document_digest(tmp_path):
+    document = minimal_document()
+    document["completion"]["require_independent_review"] = True
+    store = RunStore.create(tmp_path, document)
+
+    reviewed = store.request_review("critic", "Check the current document", ReadyCritic())
+    review_state = store.read_state()["independent_review"]
+    assert reviewed["review_applied"] is True
+    assert len(review_state["document_sha256"]) == 64
+
+    changed = store.read_document().model_dump(mode="json")
+    changed["tabs"][0]["sections"][0]["fields"][0]["value"] = "Changed after critic pass"
+    (store.path / "document.json").write_text(json.dumps(changed), encoding="utf-8")
+
+    codes = {issue.code for issue in store.validation_issues()}
+    assert "independent-review-required" in codes
+    with pytest.raises(ValidationFailed):
+        store.approve("Local user", 0)
 
 
 def test_composer_proposal_is_user_applied_edited_and_compiled(tmp_path):

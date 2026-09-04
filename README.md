@@ -32,7 +32,7 @@ The canonical state is the canvas document. The browser, facilitator, reviewer, 
 - Bounded subprocess output and redirect-safe authenticated provider requests.
 - A concrete ephemeral Muse runner adapter with schema-constrained responses.
 - Separate facilitator/composer and independent-reviewer command routes.
-- Optional revision-bound independent-review gating before user approval.
+- Optional revision-and-digest-bound independent-review gating before user approval.
 - Six agent skills and four starting templates, including graph-backed and self-hosting canvases.
 - Real headless-Chrome integration coverage for edit → validate → approve → compile.
 

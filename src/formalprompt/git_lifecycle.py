@@ -100,12 +100,21 @@ def create_retrospective(
     if ancestor.returncode != 0:
         raise GitLifecycleError("True Initialization checkpoint is not an ancestor of HEAD")
 
-    name_status = _git(repo, "diff", "--name-status", "--find-renames", baseline_commit, head)
+    name_status = _git(
+        repo,
+        "diff",
+        "--name-status",
+        "-z",
+        "--find-renames",
+        baseline_commit,
+        head,
+        strip=False,
+    )
     stat = _git(repo, "diff", "--stat", baseline_commit, head)
     commits = _git(repo, "log", "--oneline", f"{baseline_commit}..{head}")
     patch = _git(repo, "diff", "--binary", baseline_commit, head, strip=False)
     changed = _parse_name_status(name_status)
-    sensitive = [item for item in changed if _is_initialization_sensitive(item["path"])]
+    sensitive = [item for item in changed if _is_initialization_sensitive_change(item)]
     report = _retrospective_markdown(
         baseline=baseline,
         baseline_commit=baseline_commit,
@@ -168,13 +177,22 @@ def _git(repo: Path, *arguments: str, allow_failure: bool = False, strip: bool =
 
 def _parse_name_status(value: str) -> list[dict[str, str]]:
     changes: list[dict[str, str]] = []
-    for line in value.splitlines():
-        parts = line.split("\t")
-        if len(parts) < 2:
-            continue
-        status = parts[0]
-        path = parts[-1]
-        changes.append({"status": status, "path": path})
+    fields = value.split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    index = 0
+    while index < len(fields):
+        status = fields[index]
+        index += 1
+        path_count = 2 if status.startswith(("R", "C")) else 1
+        if index + path_count > len(fields):
+            raise GitLifecycleError("Git returned malformed NUL-delimited name-status output")
+        if path_count == 2:
+            old_path, path = fields[index : index + 2]
+            changes.append({"status": status, "old_path": old_path, "path": path})
+        else:
+            changes.append({"status": status, "path": fields[index]})
+        index += path_count
     return changes
 
 
@@ -186,6 +204,18 @@ def _is_initialization_sensitive(path: str) -> bool:
         or normalized.startswith(SENSITIVE_PREFIXES)
         or normalized.casefold().endswith(".md")
     )
+
+
+def _is_initialization_sensitive_change(change: dict[str, str]) -> bool:
+    return _is_initialization_sensitive(change["path"]) or (
+        "old_path" in change and _is_initialization_sensitive(change["old_path"])
+    )
+
+
+def _format_change(change: dict[str, str]) -> str:
+    if "old_path" in change:
+        return f"- `{change['status']}` `{change['old_path']}` -> `{change['path']}`"
+    return f"- `{change['status']}` `{change['path']}`"
 
 
 def _retrospective_markdown(
@@ -217,14 +247,14 @@ def _retrospective_markdown(
         "",
     ]
     if sensitive:
-        lines.extend(f"- `{item['status']}` `{item['path']}`" for item in sensitive)
+        lines.extend(_format_change(item) for item in sensitive)
     else:
         lines.append("No prompt, skill, template, documentation, or governance files changed.")
     lines.extend(["", "## Commits after True Initialization", "", "```text"])
     lines.append(commits or "No commits after the checkpoint.")
     lines.extend(["```", "", "## All changed files", ""])
     if changed:
-        lines.extend(f"- `{item['status']}` `{item['path']}`" for item in changed)
+        lines.extend(_format_change(item) for item in changed)
     else:
         lines.append("No committed file changes.")
     lines.extend(

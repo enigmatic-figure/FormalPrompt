@@ -91,7 +91,9 @@ invalidates that approval before the changed document can be compiled.
 
 `require_user_approval` is always true in v1. When `require_independent_review` is true, readiness
 also requires a critic response with `disposition: ready` and no replacement document, recorded for
-the exact current revision. Any later field, artifact, or proposal edit invalidates that review.
+the exact current revision and canonical document digest. Any later field, artifact, workflow, or
+proposal edit invalidates that review. The digest check also rejects a stale pass if a process fails
+between the atomic document and state-file replacements of an edit.
 
 ## Events
 

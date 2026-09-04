@@ -186,6 +186,16 @@ def collect_audit_index(
             raise InterventionError(
                 f"Intervention event on line {event_line} references unknown node: {node_id}"
             )
+        session_window = _session_window(
+            session_source,
+            marker["session_event"],
+            window_lines,
+        )
+        if session_window is not None and not session_window["matches"]:
+            raise InterventionError(
+                f"Session correlation ID {marker['session_event']!r} was not found in "
+                f"{session_window['path']}"
+            )
         entries.append(
             {
                 "marker": marker,
@@ -196,11 +206,7 @@ def collect_audit_index(
                     "json_pointer": _node_pointer(workflow, node_id),
                     "resource_ids": _node_resource_ids(nodes[node_id]),
                 },
-                "session_window": _session_window(
-                    session_source,
-                    marker["session_event"],
-                    window_lines,
-                ),
+                "session_window": session_window,
                 "git": _git_bookmark(repo_root, marker["git_head"], collection_head),
             }
         )

@@ -151,6 +151,50 @@ def test_collector_refuses_to_replace_index_without_force(tmp_path):
     assert replaced["interventions"] == []
 
 
+def test_collector_rejects_a_supplied_log_without_every_anchor(tmp_path):
+    repo = _repository(tmp_path)
+    store = _compiled_run(tmp_path)
+    record_intervention(
+        store.path,
+        graph_node="implement",
+        repository=repo,
+        session_event="missing-anchor",
+    )
+    session_log = tmp_path / "wrong-session.log"
+    session_log.write_text("A different execution session.\n", encoding="utf-8")
+
+    with pytest.raises(InterventionError, match="missing-anchor.*was not found"):
+        collect_audit_index(store.path, repository=repo, session_log=session_log)
+
+
+def test_collector_retains_every_occurrence_of_an_anchor(tmp_path):
+    repo = _repository(tmp_path)
+    store = _compiled_run(tmp_path)
+    record_intervention(
+        store.path,
+        graph_node="implement",
+        repository=repo,
+        session_event="repeated-anchor",
+    )
+    session_log = tmp_path / "session.log"
+    session_log.write_text(
+        "repeated-anchor\nbetween\nrepeated-anchor\n",
+        encoding="utf-8",
+    )
+
+    index = collect_audit_index(
+        store.path,
+        repository=repo,
+        session_log=session_log,
+        window_lines=0,
+    )
+
+    assert index["interventions"][0]["session_window"]["matches"] == [
+        {"anchor_line": 1, "start_line": 1, "end_line": 1},
+        {"anchor_line": 3, "start_line": 3, "end_line": 3},
+    ]
+
+
 def test_cli_records_marker_and_builds_index(tmp_path):
     repo = _repository(tmp_path)
     store = _compiled_run(tmp_path)
