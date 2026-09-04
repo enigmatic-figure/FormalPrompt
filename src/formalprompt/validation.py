@@ -584,19 +584,19 @@ def _validate_join(node: JoinWorkflowNode) -> list[ValidationIssue]:
                 node.id,
             )
         )
-    if node.strategy == "any" and node.remaining_branches != "cancel":
+    if node.strategy == "any" and node.remaining_inputs != "ignore":
         issues.append(
             _issue(
-                "join-any-cancellation-missing",
-                f"Any-join node {node.title} must cancel its remaining branches",
+                "join-any-input-policy-missing",
+                f"Any-join node {node.title} must ignore later successful inputs",
                 node.id,
             )
         )
-    if node.strategy == "all" and node.remaining_branches is not None:
+    if node.strategy == "all" and node.remaining_inputs is not None:
         issues.append(
             _issue(
-                "join-all-cancellation-invalid",
-                f"All-join node {node.title} cannot declare remaining-branch behavior",
+                "join-all-input-policy-invalid",
+                f"All-join node {node.title} cannot declare a remaining-input policy",
                 node.id,
             )
         )

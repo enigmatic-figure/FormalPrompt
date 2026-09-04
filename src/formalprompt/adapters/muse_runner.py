@@ -37,7 +37,8 @@ embedded content, pin harness capabilities to versions and execution-preflight r
 agent and operation write scopes and observable acceptance criteria, and include explicit review,
 user-approval, report, and handoff checkpoints
 when the specification calls for them. Model review repair as a bounded node policy, never as a
-cycle. Set completion.require_independent_review when a distinct critic must pass the finished
+cycle. An any join ignores later successful inputs and never cancels upstream work. Set
+completion.require_independent_review when a distinct critic must pass the finished
 package. Never alter explicit or user-confirmed facts silently. Mark uncertainty through
 provenance and review status. A proposed document is not user-approved. Do not modify the
 repository.

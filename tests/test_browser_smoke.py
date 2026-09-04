@@ -129,13 +129,18 @@ def test_real_chrome_workflow_graph_edit_journey(tmp_path):
             "title": "Validated implementation workflow",
             "revision": 0,
         }
+        assert journey["added"] == {
+            "provenance": "unresolved",
+            "state": "unresolved · needs input",
+        }
         assert journey["final"] == {
-            "nodes": 6,
+            "nodes": 7,
             "edges": 7,
             "connectedPort": True,
+            "addedProvenance": "unresolved",
             "selectedTitle": "Implement verified project",
             "inspector": "Implement verified project",
-            "revision": 2,
+            "revision": 3,
             "hashCleared": True,
         }
         saved = store.read_document().workflow

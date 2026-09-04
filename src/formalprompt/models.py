@@ -220,7 +220,7 @@ class GateWorkflowNode(WorkflowNodeBase):
 class JoinWorkflowNode(WorkflowNodeBase):
     kind: Literal["join"]
     strategy: Literal["all", "any"] = "all"
-    remaining_branches: Literal["cancel"] | None = None
+    remaining_inputs: Literal["ignore"] | None = None
 
 
 WorkflowNode = Annotated[

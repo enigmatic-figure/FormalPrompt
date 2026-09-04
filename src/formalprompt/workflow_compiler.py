@@ -65,10 +65,12 @@ def _execution_contract(graph: WorkflowGraph, resolved_resources: dict[str, dict
         "## Runtime invariants",
         "",
         "- `artifacts/workflow.json` is the authoritative approved blueprint.",
-        "- Execute a node only when its required incoming ports are satisfied.",
+        "- Execute an ordinary node only when its required incoming ports are satisfied; an "
+        "any-join follows the first-success rule below.",
         "- An all-join becomes ready after every declared input edge succeeds.",
-        "- An any-join becomes ready after its first successful input and cancels all remaining "
-        "upstream branches at that join; cancellation is a terminal, non-success state.",
+        "- An any-join becomes ready after its first successful input and ignores later inputs. "
+        "Upstream work is not cancelled; if no input succeeds, it fails after all inputs become "
+        "terminal.",
         "- Never widen a node's declared resources, tools, write scope, or authority silently.",
         "- An empty write scope is read-only. Mutating operations may write only within their "
         "declared scope; checkpoint uses only the pinned git-checkpoint capability.",

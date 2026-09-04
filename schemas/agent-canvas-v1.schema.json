@@ -952,10 +952,10 @@
           "title": "Strategy",
           "type": "string"
         },
-        "remaining_branches": {
+        "remaining_inputs": {
           "anyOf": [
             {
-              "const": "cancel",
+              "const": "ignore",
               "type": "string"
             },
             {
@@ -963,7 +963,7 @@
             }
           ],
           "default": null,
-          "title": "Remaining Branches"
+          "title": "Remaining Inputs"
         }
       },
       "required": [

@@ -644,7 +644,7 @@ function addWorkflowNode(graph, kind) {
   const position = { x: 80 + (index % 4) * 260, y: 100 + Math.floor(index / 4) * 190 };
   const controlIn = [{ id: "in", label: "Input", data_type: "control", required: true, multiple: false }];
   const controlOut = [{ id: "out", label: "Output", data_type: "control", required: false, multiple: false }];
-  const common = { id, kind, title: `${kind[0].toUpperCase()}${kind.slice(1)} ${index}`, description: "", position, input_ports: controlIn, output_ports: controlOut, provenance: "user-confirmed", review_status: "accepted", importance: "normal", rationale: "Added by the user." };
+  const common = { id, kind, title: `${kind[0].toUpperCase()}${kind.slice(1)} ${index}`, description: "", position, input_ports: controlIn, output_ports: controlOut, provenance: "unresolved", review_status: "needs-input", importance: "normal", rationale: "Added by the user; complete and save the declaration to confirm it." };
   const prompt = updated.resources.find((resource) => resource.kind === "prompt")?.id || "select.prompt";
   let node;
   if (kind === "input") node = { ...common, input_ports: [], resource_ids: [] };
@@ -653,7 +653,7 @@ function addWorkflowNode(graph, kind) {
   else if (kind === "operation") node = { ...common, operation: "research", instruction_resource: prompt, resource_ids: [], write_scope: [], acceptance_criteria: ["Define observable completion"], timeout_seconds: 3600 };
   else if (kind === "review") node = { ...common, model: "select-review-model", prompt_resource: prompt, subject_resources: [], required_evidence: ["Define required evidence"], independent: true, independent_from: [], remediation: { maximum_rounds: 3, repair_template_resource: updated.resources.find((resource) => ["template", "prompt"].includes(resource.kind))?.id || "select.repair-template", exhaustion: "request-user-decision" } };
   else if (kind === "gate") node = { ...common, gate: "user-approval", criteria: ["Define approval condition"], required_evidence: [] };
-  else node = { ...common, strategy: "all", remaining_branches: null, input_ports: [
+  else node = { ...common, strategy: "all", remaining_inputs: null, input_ports: [
     { id: "branch-a", label: "Branch A", data_type: "control", required: true, multiple: false },
     { id: "branch-b", label: "Branch B", data_type: "control", required: true, multiple: false },
   ] };

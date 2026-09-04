@@ -42,11 +42,14 @@ Edges connect one declared output port to one declared input port of the same da
 - artifact carries a produced durable resource;
 - evidence carries verification or review proof.
 
-A node is ready only when each required input port is satisfied. An input port accepts one edge unless multiple is true. A runtime may schedule independent ready nodes concurrently up to maximum_parallel_nodes.
+Except for the any-join rule below, a node is ready only when each required input port is satisfied. An input port accepts one edge unless multiple is true. A runtime may schedule independent ready nodes concurrently up to maximum_parallel_nodes.
 
 Join inputs are required, single-cardinality control ports. An all join becomes ready only after
 every declared input edge succeeds. An any join becomes ready after the first successful input and
-cancels every remaining upstream branch at that join; cancellation is terminal but not success.
+ignores later inputs. It does not cancel upstream work: those nodes continue according to their
+other graph dependencies. If no input succeeds, the any join fails after every input becomes
+terminal. This local input policy gives fan-out DAGs one deterministic meaning without requiring an
+implicit cancellation region.
 
 ## Graph invariants
 
@@ -96,7 +99,7 @@ compiled outputs. Capability availability is an execution-preflight responsibili
 
 The Workflow tab renders the DAG on a scrollable canvas. Users can select and inspect nodes, edit complete node declarations, move nodes by pointer or keyboard, add nodes, connect compatible ports, remove non-boundary nodes or edges, and arrange the graph by dependency level. Every save uses optimistic revision control, invalidates earlier approval and review, and runs server-side validation.
 
-The editor renders agent-authored values as text and JSON data. It does not evaluate graph content as HTML or JavaScript. Moving or arranging nodes changes presentation state only. A node becomes user-confirmed only when the user explicitly saves its declaration.
+The editor renders agent-authored values as text and JSON data. It does not evaluate graph content as HTML or JavaScript. Moving or arranging nodes changes presentation state only. A newly added node begins unresolved and becomes user-confirmed only when the user explicitly saves its declaration. The broker owns this transition and rejects attempts to mint protected provenance through an assistant proposal or ordinary graph save.
 
 Assistant replacement proposals expose their complete JSON and a structural change summary before
 the Apply action. The broker rejects any proposal that changes or deletes explicit or

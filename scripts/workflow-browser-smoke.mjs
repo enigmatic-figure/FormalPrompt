@@ -96,10 +96,18 @@ try {
   await waitFor("document.querySelectorAll('.graph-node').length === 6");
 
   const initial = await evaluate("({ nodes: document.querySelectorAll('.graph-node').length, edges: document.querySelectorAll('.graph-edge').length, title: document.querySelector('.graph-heading h2').textContent, revision: Number(document.querySelector('.run-meta').textContent.match(/Revision (\\d+)/)[1]) })");
-  await evaluate("(() => { document.querySelector('[data-node=intent]').click(); const target = document.querySelector('.graph-inspector select'); target.value = 'implement'; [...document.querySelectorAll('.graph-inspector button')].find((button) => button.textContent === 'Connect compatible ports').click(); return true; })()");
+  await evaluate("(() => { const kind = document.querySelector('.graph-kind'); kind.value = 'input'; [...document.querySelectorAll('.graph-toolbar button')].find((button) => button.textContent === 'Add node').click(); return true; })()");
   await waitFor(
     "document.querySelector('.run-meta').textContent.includes('Revision "
       + (initial.revision + 1)
+      + "')",
+  );
+  await waitFor("document.querySelectorAll('.graph-node').length === 7");
+  const added = await evaluate("({ provenance: document.querySelector('[data-node=input-7]').dataset.provenance, state: document.querySelector('[data-node=input-7] .node-meta').textContent })");
+  await evaluate("(() => { document.querySelector('[data-node=input-7]').click(); const target = document.querySelector('.graph-inspector select'); target.value = 'implement'; [...document.querySelectorAll('.graph-inspector button')].find((button) => button.textContent === 'Connect compatible ports').click(); return true; })()");
+  await waitFor(
+    "document.querySelector('.run-meta').textContent.includes('Revision "
+      + (initial.revision + 2)
       + "')",
   );
   await waitFor("document.querySelectorAll('.graph-edge').length === 7");
@@ -108,13 +116,13 @@ try {
   await evaluate("(() => { const area = document.querySelector('.node-json'); const node = JSON.parse(area.value); node.title = 'Implement verified project'; area.value = JSON.stringify(node, null, 2); [...document.querySelectorAll('.graph-inspector button')].find((button) => button.textContent === 'Save node declaration').click(); return true; })()");
   await waitFor(
     "document.querySelector('.run-meta').textContent.includes('Revision "
-      + (initial.revision + 2)
+      + (initial.revision + 3)
       + "')",
   );
   await waitFor("document.querySelector('[data-node=implement]').textContent.includes('Implement verified project')");
 
-  const final = await evaluate("({ nodes: document.querySelectorAll('.graph-node').length, edges: document.querySelectorAll('.graph-edge').length, connectedPort: [...document.querySelectorAll('.edge-row code')].some((node) => node.textContent === 'intent → implement'), selectedTitle: document.querySelector('[data-node=implement] strong').textContent, inspector: document.querySelector('.graph-inspector h2').textContent, revision: Number(document.querySelector('.run-meta').textContent.match(/Revision (\\d+)/)[1]), hashCleared: location.hash === '' })");
-  console.log(JSON.stringify({ initial, final }));
+  const final = await evaluate("({ nodes: document.querySelectorAll('.graph-node').length, edges: document.querySelectorAll('.graph-edge').length, connectedPort: [...document.querySelectorAll('.edge-row code')].some((node) => node.textContent === 'input-7 → implement'), addedProvenance: document.querySelector('[data-node=input-7]').dataset.provenance, selectedTitle: document.querySelector('[data-node=implement] strong').textContent, inspector: document.querySelector('.graph-inspector h2').textContent, revision: Number(document.querySelector('.run-meta').textContent.match(/Revision (\\d+)/)[1]), hashCleared: location.hash === '' })");
+  console.log(JSON.stringify({ initial, added, final }));
 } finally {
   if (socket?.readyState === WebSocket.OPEN) socket.close();
   const exited = new Promise((resolve) => chrome.once("exit", resolve));

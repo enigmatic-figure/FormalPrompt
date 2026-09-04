@@ -20,7 +20,7 @@ Consume a compiled agent-workflow-compiled/v1 blueprint as the authoritative exe
 1. Run formalprompt result against the run directory and stop if verification rejects the bundle.
 2. Read the declared execution_contract and workflow files. Do not load the facilitator transcript, request queue, or event ledger unless an audit or unresolved decision requires it.
 3. Verify agent-workflow-compiled/v1, the approved document digest, resource hashes, capability versions, entry nodes, completion nodes, and global policy.
-4. Determine readiness from incoming ports and recorded evidence. Run only nodes whose required inputs are satisfied. An all join waits for every declared input edge. An any join proceeds on its first successful input and cancels every remaining upstream branch at that join; cancellation is terminal but not success. Respect maximum_parallel_nodes.
+4. Determine readiness from incoming ports and recorded evidence. Run ordinary nodes only when their required inputs are satisfied. An all join waits for every declared input edge. An any join proceeds on its first successful input, ignores later inputs, and never cancels upstream work; if no input succeeds, fail it after every input becomes terminal. Respect maximum_parallel_nodes.
 5. For an agent node, provide only its referenced prompt, agent definition, context, skills, and tools. Enforce its write scope, timeout, budget, and acceptance criteria.
 6. For an operation, review, or gate, require the evidence named by the node. Treat an empty operation write scope as read-only and enforce every nonempty scope. A checkpoint may mutate Git only through its pinned git-checkpoint capability. Never infer a pass from process exit, file presence, or a model's unsupported claim.
 7. If physical reality invalidates an implementation detail, preserve the intended outcome, make the narrowest viable adaptation allowed by workflow.policy.deviation, and append a deviation record with the triggering evidence, affected node, old assumption, chosen change, and verification.
@@ -53,7 +53,7 @@ Runtime evidence is append-only. Git diffs may show implementation changes, but 
 ## Verification
 
 - The compiled bundle passes FormalPrompt's strict result verifier.
-- Every completed node has its required inputs and acceptance evidence.
+- Every completed ordinary/all-join node has its required inputs and acceptance evidence; an any join has at least one successful input.
 - Every adaptation is attributable and the approved graph is unchanged.
 - Review attempts remain independent and bounded.
 - All declared completion nodes are satisfied before project completion is reported.

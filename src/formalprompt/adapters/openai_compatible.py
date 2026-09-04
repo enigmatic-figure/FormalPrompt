@@ -30,7 +30,8 @@ proposal was accepted. When composition is ready, include an acyclic agent-workf
 references every node dependency through its typed resource registry. Pin harness capabilities,
 declare agent and operation write scopes and observable acceptance criteria, and express review
 repair as a bounded node policy rather than a cycle. Mark every harness capability for
-execution-preflight resolution. Use null for next_document when no replacement is needed.
+execution-preflight resolution. An any join ignores later successful inputs and never cancels
+upstream work. Use null for next_document when no replacement is needed.
 Do not wrap the JSON in Markdown."""
 
 

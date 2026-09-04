@@ -33,6 +33,7 @@ PROPOSAL_DEFINITION_ERROR_CODES = {
     "unsafe-artifact-path",
     "unknown-primary-artifact",
 }
+PROTECTED_PROVENANCE = {"explicit", "user-confirmed"}
 
 
 class RevisionConflict(Exception):
@@ -216,10 +217,40 @@ class RunStore:
                     "Cannot confirm unknown workflow nodes: "
                     + ", ".join(sorted(unknown_confirmations))
                 )
+            source_nodes = (
+                {node.id: node for node in document.workflow.nodes}
+                if document.workflow is not None
+                else {}
+            )
             for node in candidate.nodes:
                 if node.id in confirmed:
                     node.provenance = "user-confirmed"
                     node.review_status = "accepted"
+                    continue
+                source_node = source_nodes.get(node.id)
+                if source_node is None:
+                    if node.provenance in PROTECTED_PROVENANCE:
+                        raise ValueError(
+                            f"Workflow node {node.id} cannot mint {node.provenance} provenance; "
+                            "save its declaration explicitly"
+                        )
+                    continue
+                if (
+                    node.provenance in PROTECTED_PROVENANCE
+                    and node.provenance != source_node.provenance
+                ):
+                    raise ValueError(
+                        f"Workflow node {node.id} cannot mint {node.provenance} provenance; "
+                        "save its declaration explicitly"
+                    )
+                if source_node.provenance in PROTECTED_PROVENANCE:
+                    if _semantic_node(node) != _semantic_node(source_node):
+                        raise ValueError(
+                            f"Confirmed workflow node {node.id} can be changed only by "
+                            "an explicit declaration save"
+                        )
+                    node.provenance = source_node.provenance
+                    node.review_status = source_node.review_status
             document.workflow = candidate
             state["revision"] += 1
             state["status"] = "user-editing"
@@ -673,14 +704,46 @@ def _confirmed_fact_changes(
     ):
         changes.append("independent-review requirement")
     changes.extend(_confirmed_workflow_changes(source, candidate))
+    changes.extend(_minted_provenance_changes(source, candidate))
     return [
         ValidationIssue(
             code="confirmed-fact-modified",
             severity="error",
             message=f"Assistant proposal cannot modify confirmed {target}",
         )
-        for target in changes
+        for target in dict.fromkeys(changes)
     ]
+
+
+def _minted_provenance_changes(source: CanvasDocument, candidate: CanvasDocument) -> list[str]:
+    changes: list[str] = []
+    source_fields = {field.id: field for field in source.fields()}
+    for field in candidate.fields():
+        prior = source_fields.get(field.id)
+        if field.provenance in PROTECTED_PROVENANCE and (
+            prior is None or prior.provenance not in PROTECTED_PROVENANCE
+        ):
+            changes.append(f"protected provenance for field {field.id}")
+
+    source_artifacts = {artifact.id: artifact for artifact in source.initialization.artifacts}
+    for artifact in candidate.initialization.artifacts:
+        prior = source_artifacts.get(artifact.id)
+        if artifact.provenance in PROTECTED_PROVENANCE and (
+            prior is None or prior.provenance not in PROTECTED_PROVENANCE
+        ):
+            changes.append(f"protected provenance for initialization artifact {artifact.id}")
+
+    source_nodes = (
+        {node.id: node for node in source.workflow.nodes} if source.workflow is not None else {}
+    )
+    if candidate.workflow is not None:
+        for node in candidate.workflow.nodes:
+            prior = source_nodes.get(node.id)
+            if node.provenance in PROTECTED_PROVENANCE and (
+                prior is None or prior.provenance not in PROTECTED_PROVENANCE
+            ):
+                changes.append(f"protected provenance for workflow node {node.id}")
+    return changes
 
 
 def _confirmed_workflow_changes(source: CanvasDocument, candidate: CanvasDocument) -> list[str]:

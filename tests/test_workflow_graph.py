@@ -107,7 +107,7 @@ def test_mutating_operation_requires_scope_and_checkpoint_requires_bounded_capab
     assert "checkpoint-capability-missing" in codes
 
 
-def test_join_any_has_defined_cancellation_contract():
+def test_join_any_has_defined_first_success_contract():
     document = workflow_document()
     join = document["workflow"]["nodes"][4]
     join.pop("gate")
@@ -117,7 +117,7 @@ def test_join_any_has_defined_cancellation_contract():
         {
             "kind": "join",
             "strategy": "any",
-            "remaining_branches": "cancel",
+            "remaining_inputs": "ignore",
             "input_ports": [
                 {
                     "id": "branch-a",
@@ -167,9 +167,130 @@ def test_join_any_has_defined_cancellation_contract():
 
     assert validate_document(document) == []
 
-    join["remaining_branches"] = None
+    join["remaining_inputs"] = None
     codes = {issue.code for issue in validate_document(document)}
-    assert "join-any-cancellation-missing" in codes
+    assert "join-any-input-policy-missing" in codes
+
+
+def test_join_any_allows_fanout_because_it_does_not_cancel_upstream_work():
+    document = workflow_document()
+    graph = document["workflow"]
+    approve = graph["nodes"][4]
+    approve.pop("gate")
+    approve.pop("criteria")
+    approve.pop("required_evidence")
+    approve.update(
+        {
+            "kind": "join",
+            "strategy": "any",
+            "remaining_inputs": "ignore",
+            "input_ports": [
+                {
+                    "id": "branch-a",
+                    "label": "Branch A",
+                    "data_type": "control",
+                    "required": True,
+                },
+                {
+                    "id": "branch-b",
+                    "label": "Branch B",
+                    "data_type": "control",
+                    "required": True,
+                },
+            ],
+        }
+    )
+    graph["edges"][4]["target_port"] = "branch-a"
+    graph["nodes"].extend(
+        [
+            {
+                "id": "secondary",
+                "kind": "input",
+                "title": "Secondary branch",
+                "position": {"x": 800, "y": 460},
+                "output_ports": [
+                    {
+                        "id": "next",
+                        "label": "Ready",
+                        "data_type": "control",
+                    }
+                ],
+                "provenance": "proposed",
+                "review_status": "accepted",
+                "resource_ids": [],
+            },
+            {
+                "id": "completion-join",
+                "kind": "join",
+                "title": "Completion join",
+                "position": {"x": 1210, "y": 300},
+                "input_ports": [
+                    {
+                        "id": "selected",
+                        "label": "Selected",
+                        "data_type": "control",
+                        "required": True,
+                    },
+                    {
+                        "id": "secondary",
+                        "label": "Secondary",
+                        "data_type": "control",
+                        "required": True,
+                    },
+                ],
+                "output_ports": [
+                    {
+                        "id": "next",
+                        "label": "Complete",
+                        "data_type": "control",
+                    }
+                ],
+                "provenance": "proposed",
+                "review_status": "accepted",
+                "strategy": "all",
+                "remaining_inputs": None,
+            },
+        ]
+    )
+    graph["entry_nodes"].append("secondary")
+    graph["edges"][5].update(
+        {
+            "source_node": "approve",
+            "source_port": "next",
+            "target_node": "completion-join",
+            "target_port": "selected",
+        }
+    )
+    graph["edges"].extend(
+        [
+            {
+                "id": "secondary-approve",
+                "source_node": "secondary",
+                "source_port": "next",
+                "target_node": "approve",
+                "target_port": "branch-b",
+                "data_type": "control",
+            },
+            {
+                "id": "secondary-completion",
+                "source_node": "secondary",
+                "source_port": "next",
+                "target_node": "completion-join",
+                "target_port": "secondary",
+                "data_type": "control",
+            },
+            {
+                "id": "completion-handoff",
+                "source_node": "completion-join",
+                "source_port": "next",
+                "target_node": "handoff",
+                "target_port": "approved",
+                "data_type": "control",
+            },
+        ]
+    )
+
+    assert validate_document(document) == []
 
 
 def test_workflow_validation_rejects_mistyped_artifact_and_incomplete_independence():
@@ -334,6 +455,172 @@ def test_assistant_proposal_cannot_rewrite_artifact_bound_to_confirmed_node(tmp_
     )
 
 
+@pytest.mark.parametrize("object_kind", ["field", "artifact", "node"])
+@pytest.mark.parametrize("provenance", ["explicit", "user-confirmed"])
+def test_assistant_proposal_cannot_mint_protected_provenance(tmp_path, object_kind, provenance):
+    document = workflow_document()
+
+    class ProvenanceMintingComposer:
+        def invoke(self, request):
+            proposal = deepcopy(request["context"]["document"])
+            if object_kind == "field":
+                added = deepcopy(proposal["tabs"][0]["sections"][0]["fields"][0])
+                added.update(
+                    {
+                        "id": "assistant.confirmed-field",
+                        "label": "Assistant confirmed field",
+                        "provenance": provenance,
+                    }
+                )
+                proposal["tabs"][0]["sections"][0]["fields"].append(added)
+            elif object_kind == "artifact":
+                added = deepcopy(proposal["initialization"]["artifacts"][0])
+                added.update(
+                    {
+                        "id": "assistant.confirmed-artifact",
+                        "path": "prompts/ASSISTANT_CONFIRMED.md",
+                        "provenance": provenance,
+                    }
+                )
+                proposal["initialization"]["artifacts"].append(added)
+            else:
+                proposal["workflow"]["nodes"].append(
+                    {
+                        "id": "assistant-confirmed-node",
+                        "kind": "input",
+                        "title": "Assistant confirmed node",
+                        "position": {"x": 40, "y": 500},
+                        "output_ports": [],
+                        "provenance": provenance,
+                        "review_status": "accepted",
+                        "resource_ids": [],
+                    }
+                )
+            return AssistantResponse.model_validate(
+                {
+                    "contract": "agent-canvas-assistant/v1",
+                    "request_id": request["request_id"],
+                    "summary": "Attempted to mint user confirmation.",
+                    "suggestions": [],
+                    "questions": [],
+                    "disposition": "ready",
+                    "next_document": proposal,
+                }
+            )
+
+    store = RunStore.create(tmp_path, document)
+    client = TestClient(create_app(store, token="token", assistant=ProvenanceMintingComposer()))
+    headers = {"Authorization": "Bearer token"}
+    composed = client.post("/api/compose", headers=headers, json={"focus": "Mint provenance."})
+    response = client.post(
+        "/api/proposals/apply",
+        headers=headers,
+        json={"request_id": composed.json()["request_id"], "expected_revision": 0},
+    )
+
+    assert response.status_code == 422
+    issues = response.json()["detail"]["issues"]
+    target = {
+        "field": "protected provenance for field",
+        "artifact": "protected provenance for initialization artifact",
+        "node": "protected provenance for workflow node",
+    }[object_kind]
+    assert any(
+        issue["code"] == "confirmed-fact-modified" and target in issue["message"]
+        for issue in issues
+    )
+
+
+@pytest.mark.parametrize("provenance", ["explicit", "user-confirmed"])
+def test_assistant_proposal_cannot_promote_proposed_node_to_protected_provenance(
+    tmp_path, provenance
+):
+    class ProvenancePromotionComposer:
+        def invoke(self, request):
+            proposal = deepcopy(request["context"]["document"])
+            proposal["workflow"]["nodes"][1]["provenance"] = provenance
+            return AssistantResponse.model_validate(
+                {
+                    "contract": "agent-canvas-assistant/v1",
+                    "request_id": request["request_id"],
+                    "summary": "Attempted provenance promotion.",
+                    "suggestions": [],
+                    "questions": [],
+                    "disposition": "ready",
+                    "next_document": proposal,
+                }
+            )
+
+    store = RunStore.create(tmp_path, workflow_document())
+    client = TestClient(create_app(store, token="token", assistant=ProvenancePromotionComposer()))
+    headers = {"Authorization": "Bearer token"}
+    composed = client.post("/api/compose", headers=headers, json={"focus": "Promote node."})
+    response = client.post(
+        "/api/proposals/apply",
+        headers=headers,
+        json={"request_id": composed.json()["request_id"], "expected_revision": 0},
+    )
+
+    assert response.status_code == 422
+    issues = response.json()["detail"]["issues"]
+    assert any(
+        issue["code"] == "confirmed-fact-modified"
+        and "protected provenance for workflow node implement" in issue["message"]
+        for issue in issues
+    )
+
+
+def test_ordinary_workflow_save_cannot_mint_or_modify_confirmation(tmp_path):
+    document = workflow_document()
+    document["workflow"]["nodes"][1]["provenance"] = "user-confirmed"
+    store = RunStore.create(tmp_path, document)
+    client = TestClient(create_app(store, token="token"))
+    workflow = store.read_document().workflow.model_dump(mode="json")
+    workflow["nodes"][1]["title"] = "Changed without declaration confirmation"
+
+    modified = client.put(
+        "/api/workflow",
+        headers={"Authorization": "Bearer token"},
+        json={"workflow": workflow, "expected_revision": 0},
+    )
+
+    assert modified.status_code == 422
+    assert "explicit declaration save" in modified.json()["detail"]
+
+    workflow = store.read_document().workflow.model_dump(mode="json")
+    workflow["nodes"][2]["provenance"] = "user-confirmed"
+    promoted = client.put(
+        "/api/workflow",
+        headers={"Authorization": "Bearer token"},
+        json={"workflow": workflow, "expected_revision": 0},
+    )
+
+    assert promoted.status_code == 422
+    assert "cannot mint user-confirmed provenance" in promoted.json()["detail"]
+
+    workflow = store.read_document().workflow.model_dump(mode="json")
+    workflow["nodes"].append(
+        {
+            "id": "client-confirmed-node",
+            "kind": "input",
+            "title": "Client confirmed node",
+            "position": {"x": 40, "y": 500},
+            "output_ports": [],
+            "provenance": "user-confirmed",
+            "review_status": "accepted",
+            "resource_ids": [],
+        }
+    )
+    added = client.put(
+        "/api/workflow",
+        headers={"Authorization": "Bearer token"},
+        json={"workflow": workflow, "expected_revision": 0},
+    )
+
+    assert added.status_code == 422
+    assert "cannot mint user-confirmed provenance" in added.json()["detail"]
+
+
 def test_compiler_emits_digest_bound_workflow_and_execution_contract(tmp_path):
     store = RunStore.create(tmp_path, workflow_document())
     store.approve("Local user", 0)
@@ -349,6 +636,8 @@ def test_compiler_emits_digest_bound_workflow_and_execution_contract(tmp_path):
     contract = (store.path / "artifacts" / "EXECUTION_CONTRACT.md").read_text(encoding="utf-8")
     assert "Topological execution order" in contract
     assert "Review" in contract
+    assert "ignores later inputs" in contract
+    assert "Upstream work is not cancelled" in contract
 
 
 def test_workflow_tampering_is_rejected_by_bundle_verifier(tmp_path):
