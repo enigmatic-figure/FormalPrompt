@@ -35,6 +35,7 @@ def compile_workflow_payloads(
                 "binding": resource.binding,
                 "capability": resource.reference,
                 "version": resource.version,
+                "availability_check": resource.availability_check,
             }
     compiled = {
         "contract": "agent-workflow-compiled/v1",
@@ -65,7 +66,12 @@ def _execution_contract(graph: WorkflowGraph, resolved_resources: dict[str, dict
         "",
         "- `artifacts/workflow.json` is the authoritative approved blueprint.",
         "- Execute a node only when its required incoming ports are satisfied.",
+        "- An all-join becomes ready after every declared input edge succeeds.",
+        "- An any-join becomes ready after its first successful input and cancels all remaining "
+        "upstream branches at that join; cancellation is a terminal, non-success state.",
         "- Never widen a node's declared resources, tools, write scope, or authority silently.",
+        "- An empty write scope is read-only. Mutating operations may write only within their "
+        "declared scope; checkpoint uses only the pinned git-checkpoint capability.",
         "- Record physical deviations and adaptations as execution evidence; do not rewrite the "
         "approved graph.",
         "- A review retry creates a new forward-only attempt from its remediation policy.",

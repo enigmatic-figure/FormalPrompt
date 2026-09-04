@@ -506,6 +506,11 @@ class RunStore:
             response = AssistantResponse.model_validate(self._read_json_path(response_path))
             if response.next_document is None:
                 raise ValueError("The assistant response does not contain a proposed canvas")
+            preservation_errors = _confirmed_fact_changes(
+                self.read_document(), response.next_document
+            )
+            if preservation_errors:
+                raise ValidationFailed(preservation_errors)
             issues = validate_document(response.next_document)
             definition_errors = [
                 issue for issue in issues if issue.code in PROPOSAL_DEFINITION_ERROR_CODES
@@ -631,3 +636,165 @@ class RunStore:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _confirmed_fact_changes(
+    source: CanvasDocument, candidate: CanvasDocument
+) -> list[ValidationIssue]:
+    changes: list[str] = []
+    candidate_fields = {field.id: field for field in candidate.fields()}
+    for field in source.fields():
+        if field.provenance in {"explicit", "user-confirmed"} and (
+            (replacement := candidate_fields.get(field.id)) is None
+            or replacement.model_dump(mode="json") != field.model_dump(mode="json")
+        ):
+            changes.append(f"field {field.id}")
+
+    candidate_artifacts = {artifact.id: artifact for artifact in candidate.initialization.artifacts}
+    protected_artifacts = {
+        artifact.id
+        for artifact in source.initialization.artifacts
+        if artifact.provenance in {"explicit", "user-confirmed"}
+    }
+    for artifact in source.initialization.artifacts:
+        if artifact.id in protected_artifacts and (
+            (replacement := candidate_artifacts.get(artifact.id)) is None
+            or replacement.model_dump(mode="json") != artifact.model_dump(mode="json")
+        ):
+            changes.append(f"initialization artifact {artifact.id}")
+    if (
+        source.initialization.primary_artifact in protected_artifacts
+        and candidate.initialization.primary_artifact != source.initialization.primary_artifact
+    ):
+        changes.append("primary initialization artifact")
+
+    if source.completion.require_independent_review and (
+        not candidate.completion.require_independent_review
+    ):
+        changes.append("independent-review requirement")
+    changes.extend(_confirmed_workflow_changes(source, candidate))
+    return [
+        ValidationIssue(
+            code="confirmed-fact-modified",
+            severity="error",
+            message=f"Assistant proposal cannot modify confirmed {target}",
+        )
+        for target in changes
+    ]
+
+
+def _confirmed_workflow_changes(source: CanvasDocument, candidate: CanvasDocument) -> list[str]:
+    if source.workflow is None:
+        return []
+    protected = {
+        node.id
+        for node in source.workflow.nodes
+        if node.provenance in {"explicit", "user-confirmed"}
+    }
+    if not protected:
+        return []
+    if candidate.workflow is None:
+        return ["workflow"]
+    changes: list[str] = []
+    candidate_nodes = {node.id: node for node in candidate.workflow.nodes}
+    for node in source.workflow.nodes:
+        if node.id not in protected:
+            continue
+        replacement = candidate_nodes.get(node.id)
+        if replacement is None or _semantic_node(replacement) != _semantic_node(node):
+            changes.append(f"workflow node {node.id}")
+
+    source_edges = {
+        _fingerprint(edge)
+        for edge in source.workflow.edges
+        if edge.source_node in protected or edge.target_node in protected
+    }
+    candidate_edges = {
+        _fingerprint(edge)
+        for edge in candidate.workflow.edges
+        if edge.source_node in protected or edge.target_node in protected
+    }
+    if source_edges != candidate_edges:
+        changes.append("workflow connections incident to confirmed nodes")
+    for node_id in protected:
+        if (node_id in source.workflow.entry_nodes) != (
+            node_id in candidate.workflow.entry_nodes
+        ) or (node_id in source.workflow.completion_nodes) != (
+            node_id in candidate.workflow.completion_nodes
+        ):
+            changes.append(f"workflow boundary membership for {node_id}")
+
+    referenced = {
+        resource_id
+        for node in source.workflow.nodes
+        if node.id in protected
+        for resource_id in _node_resource_ids(node)
+    }
+    source_resources = {resource.id: resource for resource in source.workflow.resources}
+    candidate_resources = {resource.id: resource for resource in candidate.workflow.resources}
+    source_artifacts = {artifact.id: artifact for artifact in source.initialization.artifacts}
+    candidate_artifacts = {artifact.id: artifact for artifact in candidate.initialization.artifacts}
+    for resource_id in referenced:
+        source_resource = source_resources.get(resource_id)
+        candidate_resource = candidate_resources.get(resource_id)
+        if (
+            source_resource is None
+            or candidate_resource is None
+            or (
+                source_resource.model_dump(mode="json")
+                != candidate_resource.model_dump(mode="json")
+            )
+        ):
+            changes.append(f"workflow resource {resource_id}")
+            continue
+        if source_resource.binding == "initialization-artifact":
+            source_artifact = source_artifacts.get(source_resource.reference)
+            candidate_artifact = candidate_artifacts.get(source_resource.reference)
+            if (
+                source_artifact is None
+                or candidate_artifact is None
+                or source_artifact.model_dump(mode="json")
+                != candidate_artifact.model_dump(mode="json")
+            ):
+                changes.append(
+                    "initialization artifact "
+                    f"{source_resource.reference} referenced by a confirmed workflow node"
+                )
+    if source.workflow.policy != candidate.workflow.policy:
+        changes.append("workflow policy")
+    return changes
+
+
+def _semantic_node(node) -> dict[str, Any]:
+    value = node.model_dump(mode="json")
+    value.pop("position", None)
+    return value
+
+
+def _fingerprint(value) -> str:
+    return json.dumps(value.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+
+def _node_resource_ids(node) -> set[str]:
+    resources: set[str] = set()
+    for attribute in (
+        "prompt_resource",
+        "agent_definition_resource",
+        "instruction_resource",
+        "resource_id",
+    ):
+        value = getattr(node, attribute, None)
+        if value:
+            resources.add(value)
+    for attribute in (
+        "resource_ids",
+        "context_resources",
+        "skill_resources",
+        "tool_resources",
+        "subject_resources",
+    ):
+        resources.update(getattr(node, attribute, []))
+    remediation = getattr(node, "remediation", None)
+    if remediation is not None:
+        resources.add(remediation.repair_template_resource)
+    return resources

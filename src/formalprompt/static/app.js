@@ -129,9 +129,45 @@ function renderAssistantResult(field, result) {
 
 function appendProposalAction(panel, result) {
   if (result.status !== "completed" || !result.response?.next_document) return;
+  const proposal = result.response.next_document;
+  const preview = element("textarea", {
+    className: "control proposal-preview",
+    readonly: "readonly",
+    "aria-label": "Proposed replacement canvas JSON",
+  });
+  preview.value = JSON.stringify(proposal, null, 2);
+  panel.append(element("details", { className: "proposal-inspection" }, [
+    element("summary", { text: proposalChangeSummary(session.document, proposal) }),
+    element("p", {
+      className: "description",
+      text: "Inspect the complete replacement before applying it. Confirmed facts are enforced by the broker.",
+    }),
+    preview,
+  ]));
   const apply = element("button", { className: "button compact", text: "Apply proposed canvas", disabled: busy });
   apply.addEventListener("click", () => applyProposal(result.request_id));
   panel.append(apply);
+}
+
+function proposalChangeSummary(current, proposal) {
+  const currentFields = new Map(current.tabs.flatMap((tab) => tab.sections)
+    .flatMap((section) => section.fields).map((field) => [field.id, JSON.stringify(field)]));
+  const proposedFields = new Map(proposal.tabs.flatMap((tab) => tab.sections)
+    .flatMap((section) => section.fields).map((field) => [field.id, JSON.stringify(field)]));
+  const currentArtifacts = new Map((current.initialization?.artifacts || [])
+    .map((artifact) => [artifact.id, JSON.stringify(artifact)]));
+  const proposedArtifacts = new Map((proposal.initialization?.artifacts || [])
+    .map((artifact) => [artifact.id, JSON.stringify(artifact)]));
+  const fieldChanges = mapChangeCount(currentFields, proposedFields);
+  const artifactChanges = mapChangeCount(currentArtifacts, proposedArtifacts);
+  const currentNodes = current.workflow?.nodes.length || 0;
+  const proposedNodes = proposal.workflow?.nodes.length || 0;
+  return `Inspect proposal · ${fieldChanges} field changes · ${artifactChanges} artifact changes · ${currentNodes}→${proposedNodes} nodes`;
+}
+
+function mapChangeCount(left, right) {
+  const keys = new Set([...left.keys(), ...right.keys()]);
+  return [...keys].filter((key) => left.get(key) !== right.get(key)).length;
 }
 
 async function applyProposal(requestId) {
@@ -573,11 +609,14 @@ function connectWorkflowNodes(graph, sourceId, targetId) {
   const source = graph.nodes.find((node) => node.id === sourceId);
   const target = graph.nodes.find((node) => node.id === targetId);
   const pair = source.output_ports.flatMap((output) => target.input_ports.map((input) => [output, input]))
-    .find(([output, input]) => output.data_type === input.data_type);
+    .find(([output, input]) => {
+      if (output.data_type !== input.data_type) return false;
+      return input.multiple || !graph.edges.some(
+        (edge) => edge.target_node === targetId && edge.target_port === input.id,
+      );
+    });
   if (!pair) { announce("These nodes have no compatible open port types", true); return; }
   const [output, input] = pair;
-  const occupied = graph.edges.some((edge) => edge.target_node === targetId && edge.target_port === input.id);
-  if (occupied && !input.multiple) { announce(`${target.title} port ${input.label} already has a connection`, true); return; }
   const updated = structuredClone(graph);
   const base = `${sourceId}-${targetId}-${output.data_type}`.replace(/[^A-Za-z0-9_.-]/g, "-");
   let id = base;
@@ -611,10 +650,13 @@ function addWorkflowNode(graph, kind) {
   if (kind === "input") node = { ...common, input_ports: [], resource_ids: [] };
   else if (kind === "artifact") node = { ...common, resource_id: updated.resources[0]?.id || "select.resource", mode: "read" };
   else if (kind === "agent") node = { ...common, model: "select-model", prompt_resource: prompt, agent_definition_resource: null, context_resources: [], skill_resources: [], tool_resources: [], write_scope: [], acceptance_criteria: ["Define observable completion"], timeout_seconds: 3600, token_budget: null };
-  else if (kind === "operation") node = { ...common, operation: "research", instruction_resource: prompt, resource_ids: [], acceptance_criteria: ["Define observable completion"] };
+  else if (kind === "operation") node = { ...common, operation: "research", instruction_resource: prompt, resource_ids: [], write_scope: [], acceptance_criteria: ["Define observable completion"], timeout_seconds: 3600 };
   else if (kind === "review") node = { ...common, model: "select-review-model", prompt_resource: prompt, subject_resources: [], required_evidence: ["Define required evidence"], independent: true, independent_from: [], remediation: { maximum_rounds: 3, repair_template_resource: updated.resources.find((resource) => ["template", "prompt"].includes(resource.kind))?.id || "select.repair-template", exhaustion: "request-user-decision" } };
   else if (kind === "gate") node = { ...common, gate: "user-approval", criteria: ["Define approval condition"], required_evidence: [] };
-  else node = { ...common, strategy: "all" };
+  else node = { ...common, strategy: "all", remaining_branches: null, input_ports: [
+    { id: "branch-a", label: "Branch A", data_type: "control", required: true, multiple: false },
+    { id: "branch-b", label: "Branch B", data_type: "control", required: true, multiple: false },
+  ] };
   updated.nodes.push(node);
   selectedWorkflowNode = id;
   saveWorkflow(updated, `${node.title} added`);

@@ -57,6 +57,8 @@ A graph-backed compilation additionally emits `workflow.json` and
 `EXECUTION_CONTRACT.md`. The verifier deterministically re-derives compiled Markdown,
 initialization payloads, graph resources, and the execution contract from the approved document;
 changing a derived file and merely updating the mutable manifest is therefore rejected.
+The local run directory is the trust boundary; its digest manifest provides integrity consistency,
+not an external signature or authenticity root.
 
 ## Run layout
 

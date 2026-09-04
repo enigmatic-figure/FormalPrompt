@@ -305,7 +305,11 @@ def _verify_workflow_resources(
             if resolution.get("sha256") != files[path].get("sha256"):
                 raise ArtifactBundleError(f"Workflow resource digest does not match: {resource_id}")
         elif binding == "harness-capability":
-            if not resolution.get("capability") or not resolution.get("version"):
+            if (
+                not resolution.get("capability")
+                or not resolution.get("version")
+                or resolution.get("availability_check") != "execution-preflight"
+            ):
                 raise ArtifactBundleError(f"Workflow capability is not pinned: {resource_id}")
         else:
             raise ArtifactBundleError(f"Workflow resource binding is invalid: {resource_id}")

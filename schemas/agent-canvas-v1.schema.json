@@ -951,6 +951,19 @@
           ],
           "title": "Strategy",
           "type": "string"
+        },
+        "remaining_branches": {
+          "anyOf": [
+            {
+              "const": "cancel",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remaining Branches"
         }
       },
       "required": [
@@ -1092,6 +1105,13 @@
           "title": "Resource Ids",
           "type": "array"
         },
+        "write_scope": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Write Scope",
+          "type": "array"
+        },
         "acceptance_criteria": {
           "items": {
             "type": "string"
@@ -1099,6 +1119,13 @@
           "minItems": 1,
           "title": "Acceptance Criteria",
           "type": "array"
+        },
+        "timeout_seconds": {
+          "default": 3600,
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Timeout Seconds",
+          "type": "integer"
         }
       },
       "required": [
@@ -1110,6 +1137,7 @@
         "kind",
         "operation",
         "instruction_resource",
+        "write_scope",
         "acceptance_criteria"
       ],
       "title": "OperationWorkflowNode",
@@ -1657,6 +1685,19 @@
           ],
           "default": null,
           "title": "Version"
+        },
+        "availability_check": {
+          "anyOf": [
+            {
+              "const": "execution-preflight",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Availability Check"
         },
         "description": {
           "default": "",

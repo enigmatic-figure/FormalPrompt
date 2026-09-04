@@ -33,6 +33,7 @@ def test_browser_shell_is_packaged_and_hardened(tmp_path):
     assert "api(`/api/artifacts/" in script.text
     assert "Apply suggestion" in script.text
     assert "Apply proposed canvas" in script.text
+    assert "Inspect the complete replacement before applying it" in script.text
     assert "Compose initialization" in script.text
     assert "Arrange DAG" in script.text
     assert "Connect compatible ports" in script.text

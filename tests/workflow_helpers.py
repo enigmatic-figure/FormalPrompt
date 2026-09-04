@@ -12,6 +12,7 @@ def workflow_document() -> dict:
             _artifact("agent.codex", "agents/CODEX.agent.md", "agent-definition", "Agent"),
             _artifact("prompt.verify", "prompts/VERIFY.md", "primary-prompt", "Verify"),
             _artifact("prompt.review", "prompts/REVIEW.md", "primary-prompt", "Review"),
+            _artifact("prompt.handoff", "prompts/HANDOFF.md", "primary-prompt", "Handoff"),
             _artifact(
                 "template.repair",
                 "templates/REPAIR.md",
@@ -29,6 +30,7 @@ def workflow_document() -> dict:
             _resource("agent.codex", "agent-definition", "agent.codex"),
             _resource("prompt.verify", "prompt", "prompt.verify"),
             _resource("prompt.review", "prompt", "prompt.review"),
+            _resource("prompt.handoff", "prompt", "prompt.handoff"),
             _resource("template.repair", "template", "template.repair"),
             {
                 "id": "tool.terminal",
@@ -37,6 +39,7 @@ def workflow_document() -> dict:
                 "binding": "harness-capability",
                 "reference": "terminal",
                 "version": "codex-runtime/v1",
+                "availability_check": "execution-preflight",
             },
         ],
         "nodes": [
@@ -61,6 +64,7 @@ def workflow_document() -> dict:
                 "operation": "test",
                 "instruction_resource": "prompt.verify",
                 "resource_ids": ["tool.terminal"],
+                "write_scope": [],
                 "acceptance_criteria": ["All configured checks pass"],
                 "input_ports": [_port("start", "Implementation", "control", required=True)],
                 "output_ports": [
@@ -98,7 +102,8 @@ def workflow_document() -> dict:
             {
                 **_node("handoff", "operation", 1340, 180),
                 "operation": "handoff",
-                "instruction_resource": "prompt.verify",
+                "instruction_resource": "prompt.handoff",
+                "write_scope": ["delivery/**"],
                 "acceptance_criteria": ["Verified execution artifacts are handed off"],
                 "input_ports": [_port("approved", "Approved", "control", required=True)],
             },

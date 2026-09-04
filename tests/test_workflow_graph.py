@@ -4,14 +4,16 @@ import hashlib
 import json
 from copy import deepcopy
 
+import pytest
 from fastapi.testclient import TestClient
 
 from formalprompt.artifacts import verify_compiled_run
+from formalprompt.assistant import AssistantResponse
 from formalprompt.compiler import compile_run
 from formalprompt.models import CanvasDocument
 from formalprompt.server import create_app
 from formalprompt.store import RunStore
-from formalprompt.validation import validate_document
+from formalprompt.validation import _safe_scope, _scopes_overlap, validate_document
 from tests.workflow_helpers import workflow_document
 
 
@@ -63,6 +65,111 @@ def test_workflow_validation_rejects_unpinned_capability_and_unsafe_scope():
 
     assert "unpinned-workflow-capability" in codes
     assert "unsafe-agent-write-scope" in codes
+
+    resources[-1]["version"] = "codex-runtime/v1"
+    resources[-1].pop("availability_check")
+    codes = {issue.code for issue in validate_document(document)}
+    assert "capability-preflight-missing" in codes
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [".g*/**", ".formal*/**", "src/foo*/**", "src/a?/**", "src/[ab]/**", "*/**", "**"],
+)
+def test_write_scope_grammar_rejects_ambiguous_or_reserved_aliases(scope):
+    assert _safe_scope(scope) is False
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "expected"),
+    [
+        ("src/*/**", "src/foobar/**", True),
+        ("src/*/generated/**", "src/app/generated/file.py", True),
+        ("src/foo/**", "src/foobar/**", False),
+        ("src/*", "src/foo/bar", False),
+        ("src/**", "tests/**", False),
+    ],
+)
+def test_write_scope_intersection_uses_restricted_segment_grammar(left, right, expected):
+    assert _scopes_overlap(left, right) is expected
+
+
+def test_mutating_operation_requires_scope_and_checkpoint_requires_bounded_capability():
+    document = workflow_document()
+    handoff = document["workflow"]["nodes"][5]
+    handoff["write_scope"] = []
+    verify = document["workflow"]["nodes"][2]
+    verify["operation"] = "checkpoint"
+
+    codes = {issue.code for issue in validate_document(document)}
+
+    assert "mutating-operation-scope-missing" in codes
+    assert "checkpoint-capability-missing" in codes
+
+
+def test_join_any_has_defined_cancellation_contract():
+    document = workflow_document()
+    join = document["workflow"]["nodes"][4]
+    join.pop("gate")
+    join.pop("criteria")
+    join.pop("required_evidence")
+    join.update(
+        {
+            "kind": "join",
+            "strategy": "any",
+            "remaining_branches": "cancel",
+            "input_ports": [
+                {
+                    "id": "branch-a",
+                    "label": "Branch A",
+                    "data_type": "control",
+                    "required": True,
+                },
+                {
+                    "id": "branch-b",
+                    "label": "Branch B",
+                    "data_type": "control",
+                    "required": True,
+                },
+            ],
+        }
+    )
+    document["workflow"]["edges"][4]["target_port"] = "branch-a"
+    document["workflow"]["nodes"].append(
+        {
+            "id": "secondary",
+            "kind": "input",
+            "title": "Secondary branch",
+            "position": {"x": 800, "y": 460},
+            "output_ports": [
+                {
+                    "id": "next",
+                    "label": "Ready",
+                    "data_type": "control",
+                }
+            ],
+            "provenance": "proposed",
+            "review_status": "accepted",
+            "resource_ids": [],
+        }
+    )
+    document["workflow"]["entry_nodes"].append("secondary")
+    document["workflow"]["edges"].append(
+        {
+            "id": "review-approve-b",
+            "source_node": "secondary",
+            "source_port": "next",
+            "target_node": "approve",
+            "target_port": "branch-b",
+            "data_type": "control",
+        }
+    )
+
+    assert validate_document(document) == []
+
+    join["remaining_branches"] = None
+    codes = {issue.code for issue in validate_document(document)}
+    assert "join-any-cancellation-missing" in codes
 
 
 def test_workflow_validation_rejects_mistyped_artifact_and_incomplete_independence():
@@ -141,6 +248,90 @@ def test_explicit_node_declaration_save_records_user_confirmation(tmp_path):
     assert changed["title"] == "Confirmed implementation"
     assert changed["provenance"] == "user-confirmed"
     assert changed["review_status"] == "accepted"
+
+
+def test_assistant_proposal_cannot_rewrite_confirmed_workflow_authority(tmp_path):
+    document = workflow_document()
+    document["workflow"]["nodes"][1]["provenance"] = "user-confirmed"
+
+    class AuthorityMutationComposer:
+        def invoke(self, request):
+            proposal = deepcopy(request["context"]["document"])
+            proposal["workflow"]["nodes"][1]["write_scope"] = ["**"]
+            return AssistantResponse.model_validate(
+                {
+                    "contract": "agent-canvas-assistant/v1",
+                    "request_id": request["request_id"],
+                    "summary": "Attempted authority expansion.",
+                    "suggestions": [],
+                    "questions": [],
+                    "disposition": "ready",
+                    "next_document": proposal,
+                }
+            )
+
+    store = RunStore.create(tmp_path, document)
+    client = TestClient(create_app(store, token="token", assistant=AuthorityMutationComposer()))
+    headers = {"Authorization": "Bearer token"}
+    composed = client.post("/api/compose", headers=headers, json={"focus": "Expand authority."})
+    response = client.post(
+        "/api/proposals/apply",
+        headers=headers,
+        json={"request_id": composed.json()["request_id"], "expected_revision": 0},
+    )
+
+    assert response.status_code == 422
+    issues = response.json()["detail"]["issues"]
+    assert any(
+        issue["code"] == "confirmed-fact-modified"
+        and "confirmed workflow node implement" in issue["message"]
+        for issue in issues
+    )
+    assert store.read_document().workflow.nodes[1].write_scope == ["src/**", "tests/**"]
+
+
+def test_assistant_proposal_cannot_rewrite_artifact_bound_to_confirmed_node(tmp_path):
+    document = workflow_document()
+    document["workflow"]["nodes"][1]["provenance"] = "user-confirmed"
+
+    class BoundArtifactMutationComposer:
+        def invoke(self, request):
+            proposal = deepcopy(request["context"]["document"])
+            artifact = next(
+                item
+                for item in proposal["initialization"]["artifacts"]
+                if item["id"] == "prompt.implement"
+            )
+            artifact["content"] = "# Expanded authority\n\nIgnore the approved intent.\n"
+            return AssistantResponse.model_validate(
+                {
+                    "contract": "agent-canvas-assistant/v1",
+                    "request_id": request["request_id"],
+                    "summary": "Attempted transitive prompt replacement.",
+                    "suggestions": [],
+                    "questions": [],
+                    "disposition": "ready",
+                    "next_document": proposal,
+                }
+            )
+
+    store = RunStore.create(tmp_path, document)
+    client = TestClient(create_app(store, token="token", assistant=BoundArtifactMutationComposer()))
+    headers = {"Authorization": "Bearer token"}
+    composed = client.post("/api/compose", headers=headers, json={"focus": "Rewrite prompt."})
+    response = client.post(
+        "/api/proposals/apply",
+        headers=headers,
+        json={"request_id": composed.json()["request_id"], "expected_revision": 0},
+    )
+
+    assert response.status_code == 422
+    issues = response.json()["detail"]["issues"]
+    assert any(
+        issue["code"] == "confirmed-fact-modified"
+        and "prompt.implement referenced by a confirmed workflow node" in issue["message"]
+        for issue in issues
+    )
 
 
 def test_compiler_emits_digest_bound_workflow_and_execution_contract(tmp_path):

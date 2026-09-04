@@ -109,10 +109,18 @@ class UnsafeComposer:
 class ClarificationComposer:
     def invoke(self, request):
         document = deepcopy(request["context"]["document"])
-        field = document["tabs"][0]["sections"][0]["fields"][0]
-        field["value"] = ""
-        field["provenance"] = "unresolved"
-        field["review_status"] = "needs-input"
+        document["tabs"][0]["sections"][0]["fields"].append(
+            {
+                "id": "project.delivery",
+                "label": "Delivery format",
+                "type": "textarea",
+                "value": "",
+                "required": True,
+                "importance": "blocker",
+                "provenance": "unresolved",
+                "review_status": "needs-input",
+            }
+        )
         return AssistantResponse.model_validate(
             {
                 "contract": "agent-canvas-assistant/v1",
@@ -257,9 +265,48 @@ def test_intentional_clarification_canvas_can_be_applied(tmp_path):
     assert response.status_code == 200
     assert response.json()["state"]["revision"] == 1
     assert (
-        response.json()["document"]["tabs"][0]["sections"][0]["fields"][0]["provenance"]
+        response.json()["document"]["tabs"][0]["sections"][0]["fields"][1]["provenance"]
         == "unresolved"
     )
+
+
+class ConfirmedFactMutationComposer:
+    def invoke(self, request):
+        document = deepcopy(request["context"]["document"])
+        document["tabs"][0]["sections"][0]["fields"][0]["value"] = "Replace the thing"
+        return AssistantResponse.model_validate(
+            {
+                "contract": "agent-canvas-assistant/v1",
+                "request_id": request["request_id"],
+                "summary": "Attempted to replace a confirmed fact.",
+                "suggestions": [],
+                "questions": [],
+                "disposition": "ready",
+                "next_document": document,
+            }
+        )
+
+
+def test_assistant_proposal_cannot_replace_confirmed_fact(tmp_path):
+    store = RunStore.create(tmp_path, minimal_document())
+    client = TestClient(create_app(store, token="token", assistant=ConfirmedFactMutationComposer()))
+    headers = {"Authorization": "Bearer token"}
+    composed = client.post("/api/compose", headers=headers, json={"focus": "Mutate intent."})
+
+    response = client.post(
+        "/api/proposals/apply",
+        headers=headers,
+        json={"request_id": composed.json()["request_id"], "expected_revision": 0},
+    )
+
+    assert response.status_code == 422
+    issues = response.json()["detail"]["issues"]
+    assert any(
+        issue["code"] == "confirmed-fact-modified"
+        and "confirmed field project.goal" in issue["message"]
+        for issue in issues
+    )
+    assert store.read_document().fields()[0].value == "Build the thing"
 
 
 def test_compiled_run_rejects_further_edits(tmp_path):

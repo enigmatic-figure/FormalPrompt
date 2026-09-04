@@ -134,6 +134,7 @@ class WorkflowResource(StrictModel):
     binding: Literal["initialization-artifact", "harness-capability"]
     reference: str = Field(min_length=1)
     version: str | None = None
+    availability_check: Literal["execution-preflight"] | None = None
     description: str = ""
 
 
@@ -187,7 +188,9 @@ class OperationWorkflowNode(WorkflowNodeBase):
     ]
     instruction_resource: str
     resource_ids: list[str] = Field(default_factory=list)
+    write_scope: list[str]
     acceptance_criteria: list[str] = Field(min_length=1)
+    timeout_seconds: int = Field(default=3600, ge=1, le=86_400)
 
 
 class RemediationPolicy(StrictModel):
@@ -217,6 +220,7 @@ class GateWorkflowNode(WorkflowNodeBase):
 class JoinWorkflowNode(WorkflowNodeBase):
     kind: Literal["join"]
     strategy: Literal["all", "any"] = "all"
+    remaining_branches: Literal["cancel"] | None = None
 
 
 WorkflowNode = Annotated[

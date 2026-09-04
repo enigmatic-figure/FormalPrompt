@@ -96,17 +96,24 @@ try {
   await waitFor("document.querySelectorAll('.graph-node').length === 6");
 
   const initial = await evaluate("({ nodes: document.querySelectorAll('.graph-node').length, edges: document.querySelectorAll('.graph-edge').length, title: document.querySelector('.graph-heading h2').textContent, revision: Number(document.querySelector('.run-meta').textContent.match(/Revision (\\d+)/)[1]) })");
-  await evaluate("document.querySelector('[data-node=implement]').click()");
-  await waitFor("document.querySelector('.node-json') !== null");
-  await evaluate("(() => { const area = document.querySelector('.node-json'); const node = JSON.parse(area.value); node.title = 'Implement verified project'; area.value = JSON.stringify(node, null, 2); [...document.querySelectorAll('.graph-inspector button')].find((button) => button.textContent === 'Save node declaration').click(); return true; })()");
+  await evaluate("(() => { document.querySelector('[data-node=intent]').click(); const target = document.querySelector('.graph-inspector select'); target.value = 'implement'; [...document.querySelectorAll('.graph-inspector button')].find((button) => button.textContent === 'Connect compatible ports').click(); return true; })()");
   await waitFor(
     "document.querySelector('.run-meta').textContent.includes('Revision "
       + (initial.revision + 1)
       + "')",
   );
+  await waitFor("document.querySelectorAll('.graph-edge').length === 7");
+  await evaluate("document.querySelector('[data-node=implement]').click()");
+  await waitFor("document.querySelector('.node-json') !== null");
+  await evaluate("(() => { const area = document.querySelector('.node-json'); const node = JSON.parse(area.value); node.title = 'Implement verified project'; area.value = JSON.stringify(node, null, 2); [...document.querySelectorAll('.graph-inspector button')].find((button) => button.textContent === 'Save node declaration').click(); return true; })()");
+  await waitFor(
+    "document.querySelector('.run-meta').textContent.includes('Revision "
+      + (initial.revision + 2)
+      + "')",
+  );
   await waitFor("document.querySelector('[data-node=implement]').textContent.includes('Implement verified project')");
 
-  const final = await evaluate("({ nodes: document.querySelectorAll('.graph-node').length, edges: document.querySelectorAll('.graph-edge').length, selectedTitle: document.querySelector('[data-node=implement] strong').textContent, inspector: document.querySelector('.graph-inspector h2').textContent, revision: Number(document.querySelector('.run-meta').textContent.match(/Revision (\\d+)/)[1]), hashCleared: location.hash === '' })");
+  const final = await evaluate("({ nodes: document.querySelectorAll('.graph-node').length, edges: document.querySelectorAll('.graph-edge').length, connectedPort: [...document.querySelectorAll('.edge-row code')].some((node) => node.textContent === 'intent → implement'), selectedTitle: document.querySelector('[data-node=implement] strong').textContent, inspector: document.querySelector('.graph-inspector h2').textContent, revision: Number(document.querySelector('.run-meta').textContent.match(/Revision (\\d+)/)[1]), hashCleared: location.hash === '' })");
   console.log(JSON.stringify({ initial, final }));
 } finally {
   if (socket?.readyState === WebSocket.OPEN) socket.close();

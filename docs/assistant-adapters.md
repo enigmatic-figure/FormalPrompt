@@ -12,6 +12,10 @@ the staged artifacts. Composer prompts require resource references, pinned capab
 review remediation, declared agent authority, and an acyclic topology. The graph is still advisory
 until the user applies it.
 
+The broker enforces the prompt's preservation rule: a replacement that modifies or deletes an
+explicit or user-confirmed fact is rejected. The browser presents a structural summary and the
+complete proposed JSON before the user applies a replacement.
+
 ## Reference OpenAI-compatible adapter
 
 The package installs `formalprompt-openai-assistant`, a standard-library adapter for OpenAI-compatible chat-completions endpoints.

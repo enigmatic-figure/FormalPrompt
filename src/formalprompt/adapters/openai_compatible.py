@@ -28,8 +28,9 @@ user-confirmed facts exactly, set completion.require_independent_review when a d
 pass the finished package, distinguish assumptions through provenance, and never claim that a
 proposal was accepted. When composition is ready, include an acyclic agent-workflow/v1 graph that
 references every node dependency through its typed resource registry. Pin harness capabilities,
-declare agent write scopes and observable acceptance criteria, and express review repair as a
-bounded node policy rather than a cycle. Use null for next_document when no replacement is needed.
+declare agent and operation write scopes and observable acceptance criteria, and express review
+repair as a bounded node policy rather than a cycle. Mark every harness capability for
+execution-preflight resolution. Use null for next_document when no replacement is needed.
 Do not wrap the JSON in Markdown."""
 
 

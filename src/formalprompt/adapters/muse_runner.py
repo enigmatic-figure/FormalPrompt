@@ -33,8 +33,9 @@ disposition needs-clarification, or the preserved specification plus a minimal s
 initialization artifacts and an agent-workflow/v1 DAG with disposition ready. The workflow must be
 acyclic and connect typed ports; every prompt, agent definition, skill, tool, policy, template, and
 knowledge source used by a node must appear in its resource registry. Prefer references over
-embedded content, pin harness capabilities to versions, declare agent write scopes and observable
-acceptance criteria, and include explicit review, user-approval, report, and handoff checkpoints
+embedded content, pin harness capabilities to versions and execution-preflight resolution, declare
+agent and operation write scopes and observable acceptance criteria, and include explicit review,
+user-approval, report, and handoff checkpoints
 when the specification calls for them. Model review repair as a bounded node policy, never as a
 cycle. Set completion.require_independent_review when a distinct critic must pass the finished
 package. Never alter explicit or user-confirmed facts silently. Mark uncertainty through

@@ -13,6 +13,7 @@ from formalprompt.models import (
     CanvasDocument,
     CanvasField,
     InputWorkflowNode,
+    JoinWorkflowNode,
     OperationWorkflowNode,
     ReviewWorkflowNode,
     WorkflowGraph,
@@ -285,6 +286,15 @@ def _validate_workflow(document: CanvasDocument) -> list[ValidationIssue]:
     artifacts = {artifact.id: artifact for artifact in document.initialization.artifacts}
     for resource in graph.resources:
         if resource.binding == "initialization-artifact":
+            if resource.availability_check is not None:
+                issues.append(
+                    _issue(
+                        "artifact-availability-check-invalid",
+                        f"Initialization artifact {resource.title} cannot declare a runtime "
+                        "availability check",
+                        resource.id,
+                    )
+                )
             artifact = artifacts.get(resource.reference)
             if artifact is None:
                 issues.append(
@@ -304,14 +314,24 @@ def _validate_workflow(document: CanvasDocument) -> list[ValidationIssue]:
                         resource.id,
                     )
                 )
-        elif not resource.version:
-            issues.append(
-                _issue(
-                    "unpinned-workflow-capability",
-                    f"Harness capability {resource.title} requires a version",
-                    resource.id,
+        else:
+            if not resource.version:
+                issues.append(
+                    _issue(
+                        "unpinned-workflow-capability",
+                        f"Harness capability {resource.title} requires a version",
+                        resource.id,
+                    )
                 )
-            )
+            if resource.availability_check != "execution-preflight":
+                issues.append(
+                    _issue(
+                        "capability-preflight-missing",
+                        f"Harness capability {resource.title} must be resolved during "
+                        "execution preflight",
+                        resource.id,
+                    )
+                )
 
     incoming: dict[str, list] = {node_id: [] for node_id in nodes}
     outgoing: dict[str, list] = {node_id: [] for node_id in nodes}
@@ -333,16 +353,20 @@ def _validate_workflow(document: CanvasDocument) -> list[ValidationIssue]:
                 )
             )
         issues.extend(_validate_node_resources(node, resources))
-        if isinstance(node, AgentWorkflowNode):
+        if isinstance(node, (AgentWorkflowNode, OperationWorkflowNode)):
             for scope in node.write_scope:
                 if not _safe_scope(scope):
                     issues.append(
                         _issue(
                             "unsafe-agent-write-scope",
-                            f"Agent node {node.title} has unsafe write scope: {scope}",
+                            f"Writer node {node.title} has unsafe write scope: {scope}",
                             node.id,
                         )
                     )
+        if isinstance(node, OperationWorkflowNode):
+            issues.extend(_validate_operation_authority(node, resources))
+        if isinstance(node, JoinWorkflowNode):
+            issues.extend(_validate_join(node))
 
     for edge in graph.edges:
         source = nodes.get(edge.source_node)
@@ -402,6 +426,7 @@ def _validate_workflow(document: CanvasDocument) -> list[ValidationIssue]:
             incoming[target.id].append(edge)
 
     issues.extend(_validate_required_ports(graph, incoming))
+    issues.extend(_validate_join_sources(graph, incoming))
     issues.extend(_validate_graph_paths(graph, nodes, incoming, outgoing))
     issues.extend(_validate_review_independence(graph, nodes, incoming))
     issues.extend(_validate_parallel_write_scopes(graph, outgoing))
@@ -493,6 +518,91 @@ def _artifact_resource_compatible(artifact_kind: str, resource_kind: str) -> boo
     return resource_kind in compatible[artifact_kind]
 
 
+def _validate_operation_authority(node, resources: dict) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    if node.operation in {"materialize", "report", "handoff"} and not node.write_scope:
+        issues.append(
+            _issue(
+                "mutating-operation-scope-missing",
+                f"Operation node {node.title} must declare a write scope",
+                node.id,
+            )
+        )
+    if node.operation == "checkpoint":
+        capabilities = {
+            resource.reference
+            for resource_id in node.resource_ids
+            if (resource := resources.get(resource_id)) is not None
+            and resource.binding == "harness-capability"
+        }
+        if "git-checkpoint" not in capabilities:
+            issues.append(
+                _issue(
+                    "checkpoint-capability-missing",
+                    f"Checkpoint node {node.title} requires a pinned git-checkpoint capability",
+                    node.id,
+                )
+            )
+        if node.write_scope:
+            issues.append(
+                _issue(
+                    "checkpoint-write-scope-forbidden",
+                    f"Checkpoint node {node.title} must use the bounded git-checkpoint "
+                    "capability instead of a filesystem write scope",
+                    node.id,
+                )
+            )
+    return issues
+
+
+def _validate_join(node: JoinWorkflowNode) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    if len(node.input_ports) < 2:
+        issues.append(
+            _issue(
+                "join-input-count",
+                f"Join node {node.title} requires at least two branch inputs",
+                node.id,
+            )
+        )
+    if any(
+        port.data_type != "control" or not port.required or port.multiple
+        for port in node.input_ports
+    ):
+        issues.append(
+            _issue(
+                "join-input-contract",
+                f"Join node {node.title} inputs must be required, single-cardinality control ports",
+                node.id,
+            )
+        )
+    if any(port.data_type != "control" for port in node.output_ports):
+        issues.append(
+            _issue(
+                "join-output-contract",
+                f"Join node {node.title} outputs must be control ports",
+                node.id,
+            )
+        )
+    if node.strategy == "any" and node.remaining_branches != "cancel":
+        issues.append(
+            _issue(
+                "join-any-cancellation-missing",
+                f"Any-join node {node.title} must cancel its remaining branches",
+                node.id,
+            )
+        )
+    if node.strategy == "all" and node.remaining_branches is not None:
+        issues.append(
+            _issue(
+                "join-all-cancellation-invalid",
+                f"All-join node {node.title} cannot declare remaining-branch behavior",
+                node.id,
+            )
+        )
+    return issues
+
+
 def _validate_required_ports(
     graph: WorkflowGraph, incoming: dict[str, list]
 ) -> list[ValidationIssue]:
@@ -516,6 +626,25 @@ def _validate_required_ports(
                         node.id,
                     )
                 )
+    return issues
+
+
+def _validate_join_sources(
+    graph: WorkflowGraph, incoming: dict[str, list]
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    for node in graph.nodes:
+        if not isinstance(node, JoinWorkflowNode):
+            continue
+        sources = [edge.source_node for edge in incoming[node.id]]
+        if len(sources) != len(set(sources)):
+            issues.append(
+                _issue(
+                    "join-duplicate-branch-source",
+                    f"Join node {node.title} requires distinct source branches",
+                    node.id,
+                )
+            )
     return issues
 
 
@@ -629,13 +758,17 @@ def _validate_review_independence(
 
 
 def _validate_parallel_write_scopes(graph: WorkflowGraph, outgoing: dict) -> list[ValidationIssue]:
-    agents = [node for node in graph.nodes if isinstance(node, AgentWorkflowNode)]
+    writers = [
+        node
+        for node in graph.nodes
+        if isinstance(node, (AgentWorkflowNode, OperationWorkflowNode)) and node.write_scope
+    ]
     descendants = {
-        node.id: _reachable({node.id}, outgoing, forward=True) - {node.id} for node in agents
+        node.id: _reachable({node.id}, outgoing, forward=True) - {node.id} for node in writers
     }
     issues: list[ValidationIssue] = []
-    for index, left in enumerate(agents):
-        for right in agents[index + 1 :]:
+    for index, left in enumerate(writers):
+        for right in writers[index + 1 :]:
             ordered = right.id in descendants[left.id] or left.id in descendants[right.id]
             if not ordered and any(
                 _scopes_overlap(left_scope, right_scope)
@@ -645,7 +778,7 @@ def _validate_parallel_write_scopes(graph: WorkflowGraph, outgoing: dict) -> lis
                 issues.append(
                     _issue(
                         "overlapping-parallel-write-scope",
-                        f"Parallel agent nodes {left.title} and {right.title} "
+                        f"Parallel writer nodes {left.title} and {right.title} "
                         "have overlapping write scope",
                     )
                 )
@@ -653,28 +786,54 @@ def _validate_parallel_write_scopes(graph: WorkflowGraph, outgoing: dict) -> lis
 
 
 def _safe_scope(scope: str) -> bool:
-    path = PurePosixPath(scope)
-    return bool(scope) and not (
-        "\\" in scope
-        or path.is_absolute()
-        or any(part in {"", ".", ".."} for part in path.parts)
-        or any(part.casefold() in {".git", ".formalprompt"} for part in path.parts)
-    )
+    return _parse_scope(scope) is not None
 
 
 def _scopes_overlap(left: str, right: str) -> bool:
-    def prefix(value: str) -> str:
-        return value.split("*", 1)[0].rstrip("/").casefold()
-
-    left_prefix = prefix(left)
-    right_prefix = prefix(right)
-    if not left_prefix or not right_prefix:
+    left_parsed = _parse_scope(left)
+    right_parsed = _parse_scope(right)
+    if left_parsed is None or right_parsed is None:
         return True
-    return (
-        left_prefix == right_prefix
-        or left_prefix.startswith(right_prefix + "/")
-        or right_prefix.startswith(left_prefix + "/")
-    )
+    left_parts, left_recursive = left_parsed
+    right_parts, right_recursive = right_parsed
+    if not left_recursive and not right_recursive and len(left_parts) != len(right_parts):
+        return False
+    if left_recursive and not right_recursive and len(right_parts) < len(left_parts):
+        return False
+    if right_recursive and not left_recursive and len(left_parts) < len(right_parts):
+        return False
+    candidate_length = max(len(left_parts), len(right_parts))
+    for index in range(candidate_length):
+        left_part = left_parts[index] if index < len(left_parts) else "*"
+        right_part = right_parts[index] if index < len(right_parts) else "*"
+        if left_part != "*" and right_part != "*" and left_part != right_part:
+            return False
+    return True
+
+
+def _parse_scope(scope: str) -> tuple[tuple[str, ...], bool] | None:
+    path = PurePosixPath(scope)
+    if not scope or "\\" in scope or path.is_absolute():
+        return None
+    parts = tuple(scope.split("/"))
+    if any(part in {"", ".", ".."} for part in parts):
+        return None
+    if not parts or parts[0] in {"*", "**"}:
+        return None
+    recursive = parts[-1] == "**"
+    ordinary = parts[:-1] if recursive else parts
+    for part in ordinary:
+        if part in {"", ".", "..", "**"}:
+            return None
+        if part == "*":
+            continue
+        if (
+            not ARTIFACT_PATH_PATTERN.fullmatch(part)
+            or any(character in part for character in "?[]{}!")
+            or part.casefold() in {".git", ".formalprompt"}
+        ):
+            return None
+    return tuple(part.casefold() for part in ordinary), recursive
 
 
 def _issue(code: str, message: str, field_id: str | None = None) -> ValidationIssue:

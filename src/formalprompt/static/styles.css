@@ -192,6 +192,9 @@ textarea.control { min-height: 7rem; resize: vertical; line-height: 1.5; }
 .assistance-input { min-height: 2.2rem; padding-block: .45rem; }
 .button.compact { min-height: 2.2rem; padding: .42rem .65rem; font-size: .78rem; }
 .assistant-result { margin: .6rem 0 0; padding: .7rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--muted); background: var(--surface-raised); font-size: .8rem; line-height: 1.45; }
+.proposal-inspection { margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .65rem; }
+.proposal-inspection summary { color: var(--accent); cursor: pointer; }
+.proposal-preview { min-height: 18rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .68rem; }
 .suggestion { display: grid; gap: .4rem; margin-top: .55rem; padding-top: .55rem; border-top: 1px solid var(--line); }
 .suggestion p, .followup { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.45; }
 .followup { margin-top: .55rem; color: var(--warn); }

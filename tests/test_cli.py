@@ -58,6 +58,10 @@ def test_additional_templates_are_available(tmp_path):
         assert document["protocol"] == "agent-canvas/v1"
         if name == "workflow-project":
             assert document["workflow"]["protocol"] == "agent-workflow/v1"
+            handoff = next(
+                node for node in document["workflow"]["nodes"] if node["id"] == "handoff"
+            )
+            assert handoff["instruction_resource"] == "prompt.handoff"
 
 
 def test_schema_command_writes_protocol_schema(tmp_path):

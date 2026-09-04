@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from formalprompt.models import CanvasDocument
+from formalprompt.models import CanvasDocument, WorkflowPort
 from formalprompt.runtime import CanvasRuntime
 from formalprompt.store import RunStore
 
@@ -92,6 +92,14 @@ def test_real_chrome_workflow_graph_edit_journey(tmp_path):
         pytest.skip("Chrome-family browser and Node are required for the browser smoke test")
     template = ROOT / "src" / "formalprompt" / "templates" / "workflow-project.json"
     document = CanvasDocument.model_validate_json(template.read_text(encoding="utf-8"))
+    implement = next(item for item in document.workflow.nodes if item.id == "implement")
+    implement.input_ports.append(
+        WorkflowPort(
+            id="alternate",
+            label="Alternate control",
+            data_type="control",
+        )
+    )
     store = RunStore.create(tmp_path, document)
     runtime = CanvasRuntime(store, token="workflow-browser-smoke-token", renderer="none")
     runtime.start()
@@ -123,10 +131,11 @@ def test_real_chrome_workflow_graph_edit_journey(tmp_path):
         }
         assert journey["final"] == {
             "nodes": 6,
-            "edges": 6,
+            "edges": 7,
+            "connectedPort": True,
             "selectedTitle": "Implement verified project",
             "inspector": "Implement verified project",
-            "revision": 1,
+            "revision": 2,
             "hashCleared": True,
         }
         saved = store.read_document().workflow

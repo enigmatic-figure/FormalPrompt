@@ -85,6 +85,16 @@
         "importance": "high"
       },
       {
+        "id": "prompt.handoff",
+        "path": "prompts/HANDOFF.md",
+        "kind": "primary-prompt",
+        "title": "Handoff prompt",
+        "content": "# Handoff\n\nAssemble the verified deliverables and evidence in the declared delivery scope. Do not modify implementation files.\n",
+        "provenance": "proposed",
+        "review_status": "accepted",
+        "importance": "high"
+      },
+      {
         "id": "template.repair",
         "path": "templates/REPAIR.md",
         "kind": "workflow-template",
@@ -130,6 +140,13 @@
         "reference": "prompt.review"
       },
       {
+        "id": "prompt.handoff",
+        "kind": "prompt",
+        "title": "Handoff prompt",
+        "binding": "initialization-artifact",
+        "reference": "prompt.handoff"
+      },
+      {
         "id": "template.repair",
         "kind": "template",
         "title": "Review repair template",
@@ -142,7 +159,8 @@
         "title": "Codex terminal",
         "binding": "harness-capability",
         "reference": "terminal",
-        "version": "codex-runtime/v1"
+        "version": "codex-runtime/v1",
+        "availability_check": "execution-preflight"
       }
     ],
     "nodes": [
@@ -199,6 +217,7 @@
         "operation": "test",
         "instruction_resource": "prompt.verify",
         "resource_ids": ["tool.terminal"],
+        "write_scope": [],
         "acceptance_criteria": ["Every configured check passes with durable evidence"]
       },
       {
@@ -258,7 +277,8 @@
         "review_status": "accepted",
         "importance": "high",
         "operation": "handoff",
-        "instruction_resource": "prompt.verify",
+        "instruction_resource": "prompt.handoff",
+        "write_scope": ["delivery/**"],
         "acceptance_criteria": ["Verified execution artifacts are handed off"]
       }
     ],

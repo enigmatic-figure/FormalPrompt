@@ -226,7 +226,15 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Unknown proposal"
             ) from exc
-        except (ValueError, ValidationFailed) as exc:
+        except ValidationFailed as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "message": str(exc),
+                    "issues": [issue.model_dump() for issue in exc.issues],
+                },
+            ) from exc
+        except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
             ) from exc
