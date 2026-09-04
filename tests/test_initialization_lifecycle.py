@@ -11,6 +11,7 @@ from formalprompt.compiler import compile_run
 from formalprompt.git_lifecycle import (
     DEFAULT_BASELINE_TAG,
     GitLifecycleError,
+    _format_change,
     _is_initialization_sensitive_change,
     _parse_name_status,
     create_checkpoint,
@@ -204,6 +205,16 @@ def test_nul_name_status_parser_preserves_unusual_paths_and_rename_sources():
         "path": "renamed.bin",
     }
     assert all(_is_initialization_sensitive_change(change) for change in changes)
+
+
+def test_retrospective_escapes_control_characters_and_backticks_in_paths():
+    rendered = _format_change(
+        {"status": "R100", "old_path": "docs/line\n`old`.md", "path": "new\tname.md"}
+    )
+
+    assert rendered.count("\n") == 0
+    assert "\\n\\u0060old\\u0060.md" in rendered
+    assert "new\\tname.md" in rendered
 
 
 def test_retrospective_handles_non_ascii_paths_and_sensitive_rename_sources(tmp_path):

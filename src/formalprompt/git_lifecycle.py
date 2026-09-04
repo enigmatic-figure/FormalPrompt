@@ -214,8 +214,16 @@ def _is_initialization_sensitive_change(change: dict[str, str]) -> bool:
 
 def _format_change(change: dict[str, str]) -> str:
     if "old_path" in change:
-        return f"- `{change['status']}` `{change['old_path']}` -> `{change['path']}`"
-    return f"- `{change['status']}` `{change['path']}`"
+        return (
+            f"- `{change['status']}` {_markdown_path(change['old_path'])} -> "
+            f"{_markdown_path(change['path'])}"
+        )
+    return f"- `{change['status']}` {_markdown_path(change['path'])}"
+
+
+def _markdown_path(path: str) -> str:
+    encoded = json.dumps(path, ensure_ascii=False).replace("`", r"\u0060")
+    return f"`{encoded}`"
 
 
 def _retrospective_markdown(

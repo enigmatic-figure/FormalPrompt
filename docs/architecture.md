@@ -30,7 +30,8 @@ approval-invalidation path.
 Optional assistants are subprocesses with a JSON-in/JSON-out contract. Requests contain only the scoped field or review bundle. Responses are recorded as suggestions and never become user decisions automatically. Provider-specific adapters belong outside the core protocol.
 
 Both output streams are drained with fixed memory bounds while the subprocess runs. A timeout or
-stream overflow terminates the invocation's process tree (a POSIX session or Windows Job Object).
+stream overflow terminates the invocation's process tree (a POSIX descendant snapshot plus process
+group, or a Windows Job Object).
 Request failures are stored separately from valid responses and appended to the event ledger.
 
 The facilitator/composer and independent critic can be separate commands. A composer may return a

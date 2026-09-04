@@ -228,6 +228,10 @@ def _terminate_process_tree(process: subprocess.Popen, windows_job=None) -> None
         if completed.returncode != 0 and process.poll() is None:
             process.kill()
         return
+    descendants = _posix_descendant_pids(process.pid)
+    for pid in reversed(descendants):
+        with suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGTERM)
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -235,8 +239,49 @@ def _terminate_process_tree(process: subprocess.Popen, windows_job=None) -> None
     deadline = time.monotonic() + 0.25
     while process.poll() is None and time.monotonic() < deadline:
         time.sleep(0.01)
+    for pid in reversed(descendants):
+        with suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
     with suppress(ProcessLookupError):
         os.killpg(process.pid, signal.SIGKILL)
+
+
+def _posix_descendant_pids(root_pid: int) -> list[int]:
+    """Snapshot descendants, including children that created another session."""
+    try:
+        completed = subprocess.run(
+            ["ps", "-eo", "pid=,ppid="],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError:
+        return []
+    if completed.returncode != 0:
+        return []
+    children: dict[int, list[int]] = {}
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            continue
+        try:
+            pid, parent = (int(value) for value in fields)
+        except ValueError:
+            continue
+        children.setdefault(parent, []).append(pid)
+    descendants: list[int] = []
+    pending = list(children.get(root_pid, []))
+    seen = {root_pid}
+    while pending:
+        pid = pending.pop()
+        if pid in seen:
+            continue
+        seen.add(pid)
+        descendants.append(pid)
+        pending.extend(children.get(pid, []))
+    return descendants
 
 
 def _attach_windows_job(process: subprocess.Popen):

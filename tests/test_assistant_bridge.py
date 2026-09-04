@@ -89,9 +89,10 @@ def test_command_assistant_terminates_descendant_processes(tmp_path, failure_mod
     pid_file = tmp_path / "grandchild.pid"
     adapter = tmp_path / f"{failure_mode}-tree-adapter.py"
     overflow = "os.write(1, b'x' * 5_000_000)" if failure_mode == "overflow" else ""
+    detached = ", start_new_session=True" if os.name != "nt" else ""
     adapter.write_text(
         f"""import os, pathlib, subprocess, time
-child = subprocess.Popen([{sys.executable!r}, '-c', 'import time; time.sleep(30)'])
+child = subprocess.Popen([{sys.executable!r}, '-c', 'import time; time.sleep(30)']{detached})
 pathlib.Path({str(pid_file)!r}).write_text(str(child.pid), encoding='utf-8')
 {overflow}
 time.sleep(30)
