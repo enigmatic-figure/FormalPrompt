@@ -33,7 +33,8 @@ The canonical state is the canvas document. The browser, facilitator, reviewer, 
 - A concrete ephemeral Muse runner adapter with schema-constrained responses.
 - Separate facilitator/composer and independent-reviewer command routes.
 - Optional revision-and-digest-bound independent-review gating before user approval.
-- Six agent skills and four starting templates, including graph-backed and self-hosting canvases.
+- Seven agent skills, a seed artifact library, and four starting templates, including graph-backed
+  and self-hosting canvases.
 - Real headless-Chrome integration coverage for edit → validate → approve → compile.
 
 ## Install for development
@@ -132,6 +133,8 @@ With the personal `codex-muse` plugin installed, use a fresh Muse agent for each
 
 ```text
 FORMALPROMPT_MUSE_REPO=/path/to/project
+FORMALPROMPT_MUSE_GUIDANCE=/path/to/evidence-backed-guidance.md
+FORMALPROMPT_MUSE_LIBRARY=/path/to/artifact-library
 uv run formalprompt open canvas.json \
   --assistant-command formalprompt-muse-assistant \
   --assistant-timeout 630
@@ -197,6 +200,10 @@ skills, prompts, or project files is an intentionally separate operation.
 - `formalprompt schema --contract intervention|audit-index` — generate strict schemas for sparse
   runtime correlation artifacts.
 - `examples/formalprompt-project.json` — this project expressed in its own canvas.
+- `artifact-library/catalog.json` — composable seed prompts, policies, templates, and agent
+  definitions for the initialization composer.
+- `examples/muse-composer-evals.json` — invariant-based cases for tuning graph composition without
+  prescribing one exact graph.
 
 ## Security model
 
@@ -241,3 +248,5 @@ See `docs/protocol.md`, `docs/workflow-protocol.md`, `docs/architecture.md`,
 `docs/browser-renderers.md`, and `docs/assistant-adapters.md` for normative details.
 See `docs/initialization-lifecycle.md` for private review publication, checkpointing, and the
 post-execution audit handoff.
+See `docs/muse-tuning.md` for the external Muse prompt/guidance layers, seed artifact library, and
+first manual dogfood pass.

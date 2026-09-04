@@ -59,7 +59,7 @@
         "path": "agents/CODEX.agent.md",
         "kind": "agent-definition",
         "title": "Codex execution agent",
-        "content": "# Codex execution agent\n\nFollow the compiled workflow contract. Inspect actual repository state, preserve intended behavior, verify each change, and record deviations rather than silently changing approved intent.\n",
+        "content": "# Codex execution agent\n\nFollow the compiled workflow contract. Inspect actual repository state, preserve intended behavior, and verify each change. When a local intervention may deserve later examination, emit one sparse FormalPrompt intervention marker; do not diagnose the generating system or promote the repair upstream.\n",
         "provenance": "proposed",
         "review_status": "accepted",
         "importance": "high"

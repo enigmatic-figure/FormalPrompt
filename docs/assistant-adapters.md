@@ -52,6 +52,8 @@ may inspect and launch the canvas with a command timeout long enough for an agen
 ```text
 FORMALPROMPT_MUSE_REPO=/path/to/project
 FORMALPROMPT_MUSE_TIMEOUT=600
+FORMALPROMPT_MUSE_GUIDANCE=/path/to/evidence-backed-guidance.md
+FORMALPROMPT_MUSE_LIBRARY=/path/to/artifact-library
 
 formalprompt open canvas.json \
   --assistant-command formalprompt-muse-assistant \
@@ -62,6 +64,18 @@ The adapter discovers the personal `codex-muse` runner in its usual installation
 `FORMALPROMPT_MUSE_RUNNER` to the full `muse_agent.py` path when it is installed elsewhere. Muse
 job logs stay under the configured repository's `.codex/muse/jobs/` directory; they are not copied
 into the primary agent handoff.
+
+The default operating contract lives at `src/formalprompt/prompts/muse-facilitator.md` so prompt
+tuning does not require editing Python. `FORMALPROMPT_MUSE_PROMPT` may point to a replacement UTF-8
+contract for deliberate experiments. `FORMALPROMPT_MUSE_GUIDANCE` appends a separate UTF-8 Markdown
+layer for compact, evidence-supported environment policies. Each file is bounded to 262,144 bytes;
+historic session data should be analyzed into guidance or inspected from the configured read-only
+repository rather than copied wholesale into every invocation. See `docs/muse-tuning.md`.
+
+The packaged seed artifact library is included as optional task data on composition calls. Set
+`FORMALPROMPT_MUSE_LIBRARY` to an evolving external library directory, or to `none` to omit the
+library. Catalog paths are confined to that directory, individual files are bounded, and total
+catalog content is limited to 1,048,576 bytes.
 
 For an independent reviewer, configure a different JSON adapter with `--reviewer-command`. A
 GitHub-backed browser reviewer may require an immutable remote commit, so it is normally used as a

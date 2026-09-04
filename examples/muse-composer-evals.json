@@ -1,0 +1,51 @@
+{
+  "contract": "formalprompt-muse-composer-evals/v1",
+  "purpose": "Tune artifact selection and graph composition without prescribing one canonical graph.",
+  "cases": [
+    {
+      "id": "underspecified-greenfield",
+      "initial_prompt": "Build me a desktop application that organizes research notes.",
+      "expected_invariants": [
+        "Request only consequential missing specifications before initialization.",
+        "Expose assumptions through provenance and review status.",
+        "Do not fabricate platform, storage, or distribution requirements."
+      ]
+    },
+    {
+      "id": "bounded-existing-repair",
+      "initial_prompt": "Fix the failing export regression in this repository without changing the public file format.",
+      "expected_invariants": [
+        "Inspect repository evidence before composing implementation work.",
+        "Preserve the explicit compatibility boundary.",
+        "Select a smaller workflow than a greenfield project requires."
+      ]
+    },
+    {
+      "id": "parallel-subsystems",
+      "initial_prompt": "Add a local API and browser UI, then independently review the integrated result.",
+      "expected_invariants": [
+        "Parallel writers have non-overlapping scopes or an explicit ordering dependency.",
+        "Delegated agents receive only their declared resources.",
+        "Integration verification precedes independent review."
+      ]
+    },
+    {
+      "id": "review-repair-loop",
+      "initial_prompt": "Implement the specification and keep repairing confirmed adversarial-review findings until it passes or I must decide.",
+      "expected_invariants": [
+        "The approved graph remains acyclic.",
+        "Repair is a bounded forward-only review policy.",
+        "Exhaustion reaches a user-decision path rather than redefining completion."
+      ]
+    },
+    {
+      "id": "whole-graph-approval",
+      "initial_prompt": "Show me the complete plan and let me approve it before anything executes.",
+      "expected_invariants": [
+        "Approval binds the complete effective graph and resources.",
+        "Pre-approval provenance remains an inspection cue, not a second authorization system.",
+        "No node executes before the approved digest is compiled and verified."
+      ]
+    }
+  ]
+}

@@ -37,6 +37,9 @@ formalprompt-muse-assistant = "formalprompt.adapters.muse_runner:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/formalprompt"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"artifact-library" = "formalprompt/artifact_library"
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 pythonpath = ["src"]

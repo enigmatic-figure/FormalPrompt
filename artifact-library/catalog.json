@@ -1,0 +1,63 @@
+{
+  "contract": "formalprompt-artifact-catalog/v1",
+  "status": "seed",
+  "selection_rule": "Select and adapt only artifacts required by the approved specification and proposed workflow.",
+  "artifacts": [
+    {
+      "id": "agent.codex-incident-responder",
+      "kind": "agent-definition",
+      "path": "agents/codex-incident-responder.agent.md",
+      "purpose": "Define the primary execution agent as an intent-preserving project responder.",
+      "use_when": "Codex is assigned implementation, repair, or integration work.",
+      "avoid_when": "The workflow has no Codex execution node."
+    },
+    {
+      "id": "prompt.implementation",
+      "kind": "primary-prompt",
+      "path": "prompts/implementation.md",
+      "purpose": "Start bounded implementation from approved intent and repository evidence.",
+      "use_when": "A node changes project implementation.",
+      "avoid_when": "The node is read-only research, review, or presentation."
+    },
+    {
+      "id": "prompt.verification",
+      "kind": "primary-prompt",
+      "path": "prompts/verification.md",
+      "purpose": "Verify observable acceptance criteria without redefining completion.",
+      "use_when": "The workflow makes testable implementation claims.",
+      "avoid_when": "No executable or inspectable result is produced."
+    },
+    {
+      "id": "prompt.independent-review",
+      "kind": "primary-prompt",
+      "path": "prompts/independent-review.md",
+      "purpose": "Review an immutable checkpoint adversarially and reproducibly.",
+      "use_when": "Independent review is required by the user or risk warrants it.",
+      "avoid_when": "The reviewer cannot be independent from the work being reviewed."
+    },
+    {
+      "id": "template.review-repair",
+      "kind": "workflow-template",
+      "path": "templates/review-repair.md",
+      "purpose": "Drive bounded, finding-specific remediation without graph cycles.",
+      "use_when": "A review node permits repair attempts.",
+      "avoid_when": "The workflow requires an immediate user decision instead of repair."
+    },
+    {
+      "id": "prompt.handoff",
+      "kind": "primary-prompt",
+      "path": "prompts/handoff.md",
+      "purpose": "Return verified deliverables without importing initialization deliberation.",
+      "use_when": "The workflow produces a durable project result.",
+      "avoid_when": "No separate execution handoff is needed."
+    },
+    {
+      "id": "policy.intervention-bookmark",
+      "kind": "policy",
+      "path": "policies/intervention-bookmark.md",
+      "purpose": "Keep runtime intervention capture sparse and epistemically bounded.",
+      "use_when": "The workflow permits adaptive local repair.",
+      "avoid_when": "Execution is fully read-only or adaptation is forbidden."
+    }
+  ]
+}
