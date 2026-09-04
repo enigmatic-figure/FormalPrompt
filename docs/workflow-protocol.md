@@ -63,7 +63,7 @@ Semantic validation blocks approval when:
 - an entry has incoming edges or a completion has outgoing edges;
 - a node is unreachable from every entry or cannot reach a completion;
 - an agent write scope is unsafe;
-- unordered agent nodes have overlapping write scopes;
+- potentially concurrent writer nodes have overlapping write scopes;
 - a node remains unresolved, rejected, conflicting, or needs input.
 - a review fails to declare independence from every upstream agent.
 
@@ -73,6 +73,11 @@ double-star segment. Partial wildcards, question marks, character classes, brace
 escapes, absolute paths, parent traversal, Windows separators, .git, and .formalprompt are
 rejected. Scope intersections use this same grammar and conservatively block parallel writers when
 their intersection cannot be proven empty. An empty scope is read-only.
+
+Write serialization uses a must-happen-before relation derived from required inputs, not ordinary
+graph reachability. For an any join, only predecessors common to every input branch must precede
+its descendants; a writer on one possible input branch may overlap work released by another and is
+therefore treated as potentially concurrent.
 
 Report, materialize, and handoff operations require a nonempty write scope. A checkpoint operation
 does not receive filesystem authority; it must use a separately pinned git-checkpoint capability.
@@ -99,7 +104,15 @@ compiled outputs. Capability availability is an execution-preflight responsibili
 
 The Workflow tab renders the DAG on a scrollable canvas. Users can select and inspect nodes, edit complete node declarations, move nodes by pointer or keyboard, add nodes, connect compatible ports, remove non-boundary nodes or edges, and arrange the graph by dependency level. Every save uses optimistic revision control, invalidates earlier approval and review, and runs server-side validation.
 
-The editor renders agent-authored values as text and JSON data. It does not evaluate graph content as HTML or JavaScript. Moving or arranging nodes changes presentation state only. A newly added node begins unresolved and becomes user-confirmed only when the user explicitly saves its declaration. The broker owns this transition and rejects attempts to mint protected provenance through an assistant proposal or ordinary graph save.
+The editor renders agent-authored values as text and JSON data. It does not evaluate graph content as HTML or JavaScript. Moving or arranging nodes changes presentation state only. A newly added node begins unresolved and becomes user-confirmed only when the user explicitly saves its declaration. The broker owns this badge transition and rejects attempts to mint protected provenance through an assistant proposal or ordinary graph save.
+
+Node provenance is a pre-approval authorship and review cue, not an independent authorization seal.
+The authenticated workflow endpoint is the user-operated editing surface, so graph edits may change
+nodes, connections, resources, bindings, boundaries, and policy. Every such save advances the
+revision and clears earlier approval and independent review. Approval of the exact canonical
+document digest is the authoritative user confirmation of the complete graph: every node and its
+effective resources, edges, and policy are affirmed together regardless of its earlier provenance
+badge. Compilation accepts only that approved digest.
 
 Assistant replacement proposals expose their complete JSON and a structural change summary before
 the Apply action. The broker rejects any proposal that changes or deletes explicit or

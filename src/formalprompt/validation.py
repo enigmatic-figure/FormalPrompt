@@ -429,7 +429,7 @@ def _validate_workflow(document: CanvasDocument) -> list[ValidationIssue]:
     issues.extend(_validate_join_sources(graph, incoming))
     issues.extend(_validate_graph_paths(graph, nodes, incoming, outgoing))
     issues.extend(_validate_review_independence(graph, nodes, incoming))
-    issues.extend(_validate_parallel_write_scopes(graph, outgoing))
+    issues.extend(_validate_parallel_write_scopes(graph, incoming, outgoing))
     return issues
 
 
@@ -757,19 +757,19 @@ def _validate_review_independence(
     return issues
 
 
-def _validate_parallel_write_scopes(graph: WorkflowGraph, outgoing: dict) -> list[ValidationIssue]:
+def _validate_parallel_write_scopes(
+    graph: WorkflowGraph, incoming: dict, outgoing: dict
+) -> list[ValidationIssue]:
     writers = [
         node
         for node in graph.nodes
         if isinstance(node, (AgentWorkflowNode, OperationWorkflowNode)) and node.write_scope
     ]
-    descendants = {
-        node.id: _reachable({node.id}, outgoing, forward=True) - {node.id} for node in writers
-    }
+    must_precede = _must_predecessors(graph, incoming, outgoing)
     issues: list[ValidationIssue] = []
     for index, left in enumerate(writers):
         for right in writers[index + 1 :]:
-            ordered = right.id in descendants[left.id] or left.id in descendants[right.id]
+            ordered = left.id in must_precede[right.id] or right.id in must_precede[left.id]
             if not ordered and any(
                 _scopes_overlap(left_scope, right_scope)
                 for left_scope in left.write_scope
@@ -783,6 +783,49 @@ def _validate_parallel_write_scopes(graph: WorkflowGraph, outgoing: dict) -> lis
                     )
                 )
     return issues
+
+
+def _must_predecessors(graph: WorkflowGraph, incoming: dict, outgoing: dict) -> dict[str, set[str]]:
+    """Return nodes that must finish before each node can become ready.
+
+    Ordinary nodes and all-joins require every connected required input. An any-join
+    can proceed through any one input, so only predecessors common to every branch
+    are guaranteed to finish before it. Invalid or cyclic graphs remain conservative:
+    validation reports those errors separately and unresolved ordering never suppresses
+    a write-scope collision.
+    """
+
+    nodes = {node.id: node for node in graph.nodes}
+    indegree = {node_id: len(incoming[node_id]) for node_id in nodes}
+    pending = [node_id for node_id, degree in indegree.items() if degree == 0]
+    must_precede = {node_id: set() for node_id in nodes}
+    while pending:
+        node_id = pending.pop()
+        node = nodes[node_id]
+        branch_dependencies = [
+            {edge.source_node, *must_precede[edge.source_node]}
+            for edge in incoming[node_id]
+            if edge.source_node in nodes
+        ]
+        if isinstance(node, JoinWorkflowNode) and node.strategy == "any":
+            if branch_dependencies:
+                must_precede[node_id] = set.intersection(*branch_dependencies)
+        else:
+            required_ports = {port.id for port in node.input_ports if port.required}
+            required_dependencies = [
+                {edge.source_node, *must_precede[edge.source_node]}
+                for edge in incoming[node_id]
+                if edge.source_node in nodes and edge.target_port in required_ports
+            ]
+            if required_dependencies:
+                must_precede[node_id] = set.union(*required_dependencies)
+        for edge in outgoing[node_id]:
+            if edge.target_node not in indegree:
+                continue
+            indegree[edge.target_node] -= 1
+            if indegree[edge.target_node] == 0:
+                pending.append(edge.target_node)
+    return must_precede
 
 
 def _safe_scope(scope: str) -> bool:

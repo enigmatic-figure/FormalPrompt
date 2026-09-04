@@ -94,6 +94,83 @@ def test_write_scope_intersection_uses_restricted_segment_grammar(left, right, e
     assert _scopes_overlap(left, right) is expected
 
 
+def test_parallel_scope_analysis_does_not_treat_any_join_path_as_ordering():
+    document = workflow_document()
+    graph = document["workflow"]
+    approve = graph["nodes"][4]
+    approve.pop("gate")
+    approve.pop("criteria")
+    approve.pop("required_evidence")
+    approve.update(
+        {
+            "kind": "join",
+            "strategy": "any",
+            "remaining_inputs": "ignore",
+            "input_ports": [
+                {
+                    "id": "review",
+                    "label": "Review",
+                    "data_type": "control",
+                    "required": True,
+                },
+                {
+                    "id": "secondary",
+                    "label": "Secondary",
+                    "data_type": "control",
+                    "required": True,
+                },
+            ],
+        }
+    )
+    graph["edges"][4]["target_port"] = "review"
+    graph["nodes"].append(
+        {
+            "id": "secondary-writer",
+            "kind": "operation",
+            "title": "Secondary writer",
+            "position": {"x": 820, "y": 460},
+            "output_ports": [
+                {
+                    "id": "next",
+                    "label": "Ready",
+                    "data_type": "control",
+                }
+            ],
+            "provenance": "proposed",
+            "review_status": "accepted",
+            "operation": "materialize",
+            "instruction_resource": "prompt.verify",
+            "resource_ids": ["tool.terminal"],
+            "write_scope": ["delivery/**"],
+            "acceptance_criteria": ["Secondary delivery is materialized"],
+        }
+    )
+    graph["entry_nodes"].append("secondary-writer")
+    graph["edges"].append(
+        {
+            "id": "secondary-approve",
+            "source_node": "secondary-writer",
+            "source_port": "next",
+            "target_node": "approve",
+            "target_port": "secondary",
+            "data_type": "control",
+        }
+    )
+
+    codes = {issue.code for issue in validate_document(document)}
+
+    assert "overlapping-parallel-write-scope" in codes
+
+
+def test_parallel_scope_analysis_accepts_required_sequential_writers():
+    document = workflow_document()
+    document["workflow"]["nodes"][1]["write_scope"] = ["delivery/**"]
+
+    codes = {issue.code for issue in validate_document(document)}
+
+    assert "overlapping-parallel-write-scope" not in codes
+
+
 def test_mutating_operation_requires_scope_and_checkpoint_requires_bounded_capability():
     document = workflow_document()
     handoff = document["workflow"]["nodes"][5]
@@ -570,13 +647,17 @@ def test_assistant_proposal_cannot_promote_proposed_node_to_protected_provenance
     )
 
 
-def test_ordinary_workflow_save_cannot_mint_or_modify_confirmation(tmp_path):
+def test_ordinary_workflow_save_is_user_edit_and_cannot_mint_confirmation(tmp_path):
     document = workflow_document()
     document["workflow"]["nodes"][1]["provenance"] = "user-confirmed"
     store = RunStore.create(tmp_path, document)
+    store.approve("Local user", 0)
     client = TestClient(create_app(store, token="token"))
     workflow = store.read_document().workflow.model_dump(mode="json")
-    workflow["nodes"][1]["title"] = "Changed without declaration confirmation"
+    prompt_resource = next(
+        resource for resource in workflow["resources"] if resource["id"] == "prompt.implement"
+    )
+    prompt_resource["reference"] = "prompt.verify"
 
     modified = client.put(
         "/api/workflow",
@@ -584,15 +665,17 @@ def test_ordinary_workflow_save_cannot_mint_or_modify_confirmation(tmp_path):
         json={"workflow": workflow, "expected_revision": 0},
     )
 
-    assert modified.status_code == 422
-    assert "explicit declaration save" in modified.json()["detail"]
+    assert modified.status_code == 200
+    assert modified.json()["state"]["revision"] == 1
+    assert modified.json()["state"]["approval"] is None
+    assert modified.json()["document"]["workflow"]["nodes"][1]["provenance"] == ("user-confirmed")
 
     workflow = store.read_document().workflow.model_dump(mode="json")
     workflow["nodes"][2]["provenance"] = "user-confirmed"
     promoted = client.put(
         "/api/workflow",
         headers={"Authorization": "Bearer token"},
-        json={"workflow": workflow, "expected_revision": 0},
+        json={"workflow": workflow, "expected_revision": 1},
     )
 
     assert promoted.status_code == 422
@@ -614,7 +697,7 @@ def test_ordinary_workflow_save_cannot_mint_or_modify_confirmation(tmp_path):
     added = client.put(
         "/api/workflow",
         headers={"Authorization": "Bearer token"},
-        json={"workflow": workflow, "expected_revision": 0},
+        json={"workflow": workflow, "expected_revision": 1},
     )
 
     assert added.status_code == 422

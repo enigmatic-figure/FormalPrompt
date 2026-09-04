@@ -243,14 +243,6 @@ class RunStore:
                         f"Workflow node {node.id} cannot mint {node.provenance} provenance; "
                         "save its declaration explicitly"
                     )
-                if source_node.provenance in PROTECTED_PROVENANCE:
-                    if _semantic_node(node) != _semantic_node(source_node):
-                        raise ValueError(
-                            f"Confirmed workflow node {node.id} can be changed only by "
-                            "an explicit declaration save"
-                        )
-                    node.provenance = source_node.provenance
-                    node.review_status = source_node.review_status
             document.workflow = candidate
             state["revision"] += 1
             state["status"] = "user-editing"

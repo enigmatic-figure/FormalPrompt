@@ -83,6 +83,12 @@ Readiness for approval requires no error-level semantic issues. Approval records
 SHA-256 digest of the canonical JSON document. Compilation recomputes both, so changing
 `document.json` outside the broker cannot reuse an earlier approval.
 
+Approval is whole-document confirmation, not a collection of per-field or per-node authorization
+seals. Provenance remains useful for inspecting how pre-approval content arose, while the approved
+digest affirms the effective fields, initialization artifacts, workflow nodes, resource bindings,
+edges, boundaries, and policy together. Any authenticated user edit advances the revision and
+invalidates that approval before the changed document can be compiled.
+
 `require_user_approval` is always true in v1. When `require_independent_review` is true, readiness
 also requires a critic response with `disposition: ready` and no replacement document, recorded for
 the exact current revision. Any later field, artifact, or proposal edit invalidates that review.
