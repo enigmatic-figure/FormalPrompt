@@ -1,63 +1,271 @@
 {
   "contract": "formalprompt-artifact-catalog/v1",
   "status": "seed",
-  "selection_rule": "Select and adapt only artifacts required by the approved specification and proposed workflow.",
+  "selection_rule": "Select and adapt only the smallest applicable set. Every workflow node must bind a resource listed here; no node should invent an unpinned capability or reference an absent artifact. Prefer prompt+agent+verification for simple projects; add research, skills, and policy resources only when the spec or DAG demands them.",
   "artifacts": [
     {
       "id": "agent.codex-incident-responder",
       "kind": "agent-definition",
       "path": "agents/codex-incident-responder.agent.md",
-      "purpose": "Define the primary execution agent as an intent-preserving project responder.",
-      "use_when": "Codex is assigned implementation, repair, or integration work.",
-      "avoid_when": "The workflow has no Codex execution node."
+      "purpose": "Intent-preserving responder for repair/integration with bounded authority.",
+      "use_when": "A Codex node repairs, integrates, or adapts existing behavior.",
+      "avoid_when": "Greenfield build with no existing behavior to preserve."
+    },
+    {
+      "id": "agent.codex-builder",
+      "kind": "agent-definition",
+      "path": "agents/codex-builder.agent.md",
+      "purpose": "Greenfield/feature builder that implements the smallest satisfying change.",
+      "use_when": "A node creates new capability from a spec.",
+      "avoid_when": "The node is verification, research, or review only."
+    },
+    {
+      "id": "agent.verifier",
+      "kind": "agent-definition",
+      "path": "agents/verifier.agent.md",
+      "purpose": "Evidence-driven verifier that never redefines completion.",
+      "use_when": "A test, review, or gate node must produce pass/fail evidence.",
+      "avoid_when": "The node must write implementation files."
+    },
+    {
+      "id": "agent.researcher",
+      "kind": "agent-definition",
+      "path": "agents/researcher.agent.md",
+      "purpose": "Bounded synthesizer that produces a knowledge artifact, not code.",
+      "use_when": "A research operation must resolve load-bearing unknowns before implementation.",
+      "avoid_when": "The spec has no unknowns that change implementation."
     },
     {
       "id": "prompt.implementation",
       "kind": "primary-prompt",
       "path": "prompts/implementation.md",
-      "purpose": "Start bounded implementation from approved intent and repository evidence.",
+      "purpose": "Start bounded implementation from approved intent and repo evidence.",
       "use_when": "A node changes project implementation.",
-      "avoid_when": "The node is read-only research, review, or presentation."
+      "avoid_when": "The node is read-only research, review, or reporting."
     },
     {
       "id": "prompt.verification",
       "kind": "primary-prompt",
       "path": "prompts/verification.md",
-      "purpose": "Verify observable acceptance criteria without redefining completion.",
-      "use_when": "The workflow makes testable implementation claims.",
-      "avoid_when": "No executable or inspectable result is produced."
+      "purpose": "Verify observable acceptance criteria with command evidence.",
+      "use_when": "The workflow makes testable claims.",
+      "avoid_when": "No executable or inspectable result exists."
     },
     {
       "id": "prompt.independent-review",
       "kind": "primary-prompt",
       "path": "prompts/independent-review.md",
-      "purpose": "Review an immutable checkpoint adversarially and reproducibly.",
-      "use_when": "Independent review is required by the user or risk warrants it.",
-      "avoid_when": "The reviewer cannot be independent from the work being reviewed."
-    },
-    {
-      "id": "template.review-repair",
-      "kind": "workflow-template",
-      "path": "templates/review-repair.md",
-      "purpose": "Drive bounded, finding-specific remediation without graph cycles.",
-      "use_when": "A review node permits repair attempts.",
-      "avoid_when": "The workflow requires an immediate user decision instead of repair."
+      "purpose": "Adversarial review of an immutable checkpoint.",
+      "use_when": "Independent review is required by spec or risk.",
+      "avoid_when": "The reviewer cannot be independent from the work."
     },
     {
       "id": "prompt.handoff",
       "kind": "primary-prompt",
       "path": "prompts/handoff.md",
-      "purpose": "Return verified deliverables without importing initialization deliberation.",
-      "use_when": "The workflow produces a durable project result.",
-      "avoid_when": "No separate execution handoff is needed."
+      "purpose": "Return verified deliverables without importing deliberation.",
+      "use_when": "The workflow produces a durable result.",
+      "avoid_when": "No separate handoff is needed."
+    },
+    {
+      "id": "prompt.research",
+      "kind": "primary-prompt",
+      "path": "prompts/research.md",
+      "purpose": "Bounded synthesis into a knowledge artifact.",
+      "use_when": "An unknown blocks correct implementation.",
+      "avoid_when": "Implementation can proceed without prior synthesis."
+    },
+    {
+      "id": "prompt.report",
+      "kind": "primary-prompt",
+      "path": "prompts/report.md",
+      "purpose": "Evidence-backed report from inspected state.",
+      "use_when": "A report or handoff manifest must be produced.",
+      "avoid_when": "The node only verifies without reporting."
+    },
+    {
+      "id": "prompt.design",
+      "kind": "primary-prompt",
+      "path": "prompts/design.md",
+      "purpose": "Translate one capability into interfaces, data shapes, and test cases.",
+      "use_when": "A feature needs design before sequencing work.",
+      "avoid_when": "The feature is a small scoped change with obvious interfaces."
+    },
+    {
+      "id": "prompt.api-contract",
+      "kind": "primary-prompt",
+      "path": "prompts/api-contract.md",
+      "purpose": "Typed, versioned interface between subsystems.",
+      "use_when": "Two subsystems exchange typed data.",
+      "avoid_when": "No cross-component contract is required."
+    },
+    {
+      "id": "prompt.planning",
+      "kind": "primary-prompt",
+      "path": "prompts/planning.md",
+      "purpose": "Decompose objective into sequenced phases, scopes, and evidence.",
+      "use_when": "A workflow must be sequenced before detailed composition.",
+      "avoid_when": "The composition is a known minimal pattern."
+    },
+    {
+      "id": "skill.tdd",
+      "kind": "skill",
+      "path": "skills/tdd.skill.md",
+      "purpose": "Drive implementation through failing-then-passing tests.",
+      "use_when": "An agent node lists testable acceptance criteria.",
+      "avoid_when": "The node is research or reporting only."
+    },
+    {
+      "id": "skill.api-design",
+      "kind": "skill",
+      "path": "skills/api-design.skill.md",
+      "purpose": "Produce a strict schema with valid/invalid examples.",
+      "use_when": "A boundary needs a machine-checkable contract.",
+      "avoid_when": "No typed exchange crosses a boundary."
+    },
+    {
+      "id": "skill.documentation",
+      "kind": "skill",
+      "path": "skills/documentation.skill.md",
+      "purpose": "Docs generated from observable code, not spec copy.",
+      "use_when": "Delivery requires README or run docs.",
+      "avoid_when": "No user-facing doc is deliverable."
+    },
+    {
+      "id": "skill.browser-canvas",
+      "kind": "skill",
+      "path": "skills/browser-canvas.skill.md",
+      "purpose": "Semantic, CSP-compliant canvas rendering without code injection.",
+      "use_when": "A node must present a planner/configurator/reviewer UI.",
+      "avoid_when": "The project has no browser canvas."
     },
     {
       "id": "policy.intervention-bookmark",
-      "kind": "policy",
+      "kind": "execution-policy",
       "path": "policies/intervention-bookmark.md",
-      "purpose": "Keep runtime intervention capture sparse and epistemically bounded.",
+      "purpose": "Keep runtime intervention capture sparse and bounded.",
       "use_when": "The workflow permits adaptive local repair.",
-      "avoid_when": "Execution is fully read-only or adaptation is forbidden."
+      "avoid_when": "Execution is read-only or adaptation forbidden."
+    },
+    {
+      "id": "policy.write-scope-isolation",
+      "kind": "execution-policy",
+      "path": "policies/write-scope-isolation.md",
+      "purpose": "Disjoint scopes or ordered writers; grammar and concurrency analysis.",
+      "use_when": "Parallel writers exist or scope overlap is possible.",
+      "avoid_when": "The graph is strictly linear."
+    },
+    {
+      "id": "policy.review-gate",
+      "kind": "execution-policy",
+      "path": "policies/review-gate.md",
+      "purpose": "Independent review must precede approval; bounded remediation.",
+      "use_when": "User approval requires an independent pass.",
+      "avoid_when": "No independent review is required."
+    },
+    {
+      "id": "policy.deviation",
+      "kind": "execution-policy",
+      "path": "policies/deviation.md",
+      "purpose": "Narrow intent-preserving deviation ladder.",
+      "use_when": "Physical reality may invalidate a detail of the plan.",
+      "avoid_when": "Strict literalism is required and any deviation is a failure."
+    },
+    {
+      "id": "template.review-repair",
+      "kind": "workflow-template",
+      "path": "templates/review-repair.md",
+      "purpose": "Bounded, finding-specific repair without cycles.",
+      "use_when": "A review node permits repair attempts.",
+      "avoid_when": "The policy requires immediate user decision on failure."
+    },
+    {
+      "id": "template.dag-minimal",
+      "kind": "workflow-template",
+      "path": "templates/workflow-minimal.md",
+      "purpose": "Linear input→implement→test→gate→handoff.",
+      "use_when": "Single feature, no parallel work, no research.",
+      "avoid_when": "Parallel branches or research needed."
+    },
+    {
+      "id": "template.dag-parallel",
+      "kind": "workflow-template",
+      "path": "templates/workflow-parallel.md",
+      "purpose": "Parallel agents with disjoint scopes joined by all.",
+      "use_when": "Two or more independent subsystems.",
+      "avoid_when": "Writes would overlap without ordering."
+    },
+    {
+      "id": "template.dag-research-implement",
+      "kind": "workflow-template",
+      "path": "templates/workflow-research-implement.md",
+      "purpose": "Research produces knowledge artifact consumed by implementation.",
+      "use_when": "Load-bearing unknown precedes code.",
+      "avoid_when": "Implementation can proceed without synthesis."
+    },
+    {
+      "id": "template.dag-full-lifecycle",
+      "kind": "workflow-template",
+      "path": "templates/workflow-full-lifecycle.md",
+      "purpose": "Full research→implement→verify→review→report→checkpoint→handoff.",
+      "use_when": "An evidence-backed handoff must survive independent review.",
+      "avoid_when": "Review or checkpoint not required."
+    },
+    {
+      "id": "template.dag-patterns",
+      "kind": "workflow-template",
+      "path": "templates/dag-patterns.md",
+      "purpose": "Decision table for choosing DAG shape and join strategy.",
+      "use_when": "Selecting between minimal/parallel/research/full templates.",
+      "avoid_when": "The spec maps trivially to one template."
+    },
+    {
+      "id": "knowledge.repo-conventions",
+      "kind": "knowledge-base-plan",
+      "path": "knowledge/repo-conventions.md",
+      "purpose": "Repository layout, tooling, branch, and scope conventions.",
+      "use_when": "Implementation nodes benefit from knowing actual layout up front.",
+      "avoid_when": "The workflow is repo-agnostic."
+    },
+    {
+      "id": "knowledge.product-brief",
+      "kind": "knowledge-base-plan",
+      "path": "knowledge/product-brief.md",
+      "purpose": "One-page product purpose, non-goals, constraints, criteria, glossary.",
+      "use_when": "Scoped agents need concise approved intent.",
+      "avoid_when": "No separate product context is needed."
+    },
+    {
+      "id": "report.verification",
+      "kind": "report-template",
+      "path": "reports/verification-report.md",
+      "purpose": "Per-criterion pass/fail/unverifiable with evidence.",
+      "use_when": "A verification or test node must produce a report.",
+      "avoid_when": "Evidence is fully captured in test output alone."
+    },
+    {
+      "id": "report.handoff-manifest",
+      "kind": "report-template",
+      "path": "reports/handoff-manifest.md",
+      "purpose": "Verified deliverables, evidence pointers, checkpoint, manifest, unresolved decisions.",
+      "use_when": "The handoff node returns to the primary context.",
+      "avoid_when": "No primary-context handoff is needed."
+    },
+    {
+      "id": "knowledge.canvas-field-patterns",
+      "kind": "knowledge-base-plan",
+      "path": "knowledge/canvas-field-patterns.md",
+      "purpose": "Field type, validation, and provenance patterns for good specification forms.",
+      "use_when": "A clarification canvas must add new blocker fields.",
+      "avoid_when": "The spec is already ready and no new fields are needed."
+    },
+    {
+      "id": "knowledge.agents-md-template",
+      "kind": "knowledge-base-plan",
+      "path": "knowledge/agents-md-template.md",
+      "purpose": "Template for repository AGENTS.md steering that scoped agents consume.",
+      "use_when": "The workflow needs durable per-project agent instructions.",
+      "avoid_when": "The project has no persisted AGENTS.md."
     }
   ]
 }

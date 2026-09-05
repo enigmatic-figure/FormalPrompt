@@ -1,0 +1,872 @@
+
+
+===== USER PROMPT 1 @ 2026-08-15T09:57:42.902Z len=165 =====
+Hey there! Are you in the mood to help me design and implement a Colab experiment to make AI C-o-T systems better? I can give you some details if you are interested.
+
+
+===== USER PROMPT 2 @ 2026-08-15T10:02:28.491Z len=8629 =====
+So the good news is, I gave the details to another agent already, and he wrote everything up inside of Cot_Experiment.md
+The bad news is, he didn't get everything correct, I have reviewed the document, and it does need to be updated before we can get started. I have made some notes about the needed adjustments:
+
+I had an AI agent draft up an experiment outline an it is **quite close conceptually—roughly 85–90% of the experiment I have in mind**. We will keep the architecture and CMA-ES framing. There are about five things we should correct before we implement it.
+
+The document correctly captures the central experiment:
+
+[
+E_t=w_{1,t}e_{1,t}+w_{2,t}e_{2,t}+w_{h,t}h_t,
+\qquad
+w_i\ge0,\quad\sum w_i=1
+]
+
+with a deliberately tiny controller whose parameters are selected **only according to downstream performance**. It also correctly separates (e_1/e_2) from the model's input embedding table, keeps DeepSeek frozen, proposes CMA-ES for the initial low-dimensional search, and includes useful (e_1/e_2)-only, (e_1/h)-only, static-mixture, and lexical controls. Those are all aligned with what I have in mind.
+
+The following changes matter.
+
+### 1. Fix the indexing explicitly
+
+The document says that at reasoning step (t), (h_t), (e_{1,t}), and (e_{2,t}) produce (E_t). In a causal transformer, I think it's clearer to write:
+
+[
+x_t \rightarrow h_t \rightarrow \ell_{t+1}
+]
+
+then obtain the top candidates for the **next** input position:
+
+[
+e_{1,t+1},e_{2,t+1},
+]
+
+and construct
+
+[
+E_{t+1}
+=======
+
+f(h_t,e_{1,t+1},e_{2,t+1}).
+]
+
+Otherwise we can might make an off-by-one conceptual mistake. (h_t) is the state that predicts the next lexical item; the resulting continuous replacement occupies the next position.
+This is mostly notation, but I would fix it before coding.
+
+### 2. The “exact lexical control” is not the native DeepSeek baseline
+The document proposes forcing exactly 64 reasoning positions and then injecting `</think>`.
+That's useful experimentally because it fixes compute, but:
+
+[
+\text{64-step lexical control}
+\neq
+\text{ordinary DeepSeek generation}.
+]
+
+The lexical control is the exact baseline **inside the fixed-length experimental harness**.
+We can keep it, but add:
+
+[
+\boxed{\text{native unconstrained DeepSeek greedy baseline}}
+]
+
+as a separate reference.
+Then we have:
+
+* Native DeepSeek.
+* Manual-loop lexical DeepSeek with fixed reasoning budget.
+* Continuous-drift DeepSeek with the same fixed reasoning budget.
+
+The second and third are the causal comparison. The first tells us how much the harness itself changed behavior.
+I also would not commit to (T=64) before measuring native reasoning lengths on the chosen problem set. If typical useful reasoning is 150–300 tokens, 64 creates an unnecessarily crippled laboratory.
+
+### 3. The document is missing what I think is potentially an interesting controller input
+It has:
+
+[
+p_1,\quad p_2,\quad p_1+p_2
+]
+
+which gives us tail mass indirectly:
+
+[
+1-(p_1+p_2).
+]
+
+But it doesn't really capture the **crowded-field** idea I have worked out
+These distributions:
+[
+(.30,.25,.20,.15,\ldots)
+]
+
+and
+
+[
+(.30,.25,.001,.001,\ldots)
+]
+
+can have the same top-two relationship but very different remaining fields.
+So I'd like to explicitly record something like:
+
+[
+N_{\rm eff}=\frac{1}{\sum_i p_i^2}
+]
+
+and/or vocabulary entropy.
+Not because I am sure that it matters, but because it is essentially free once logits exist, and the controller can drive its coefficient to irrelevance if it doesn't help.
+
+### 4. Measure the norm geometry before mixing (h_t) with token embeddings
+
+This is probably the most important implementation check.
+Same dimensionality does not imply comparable numerical scale:
+
+[
+h_t\in\mathbb R^{1536},\qquad
+e_t\in\mathbb R^{1536}.
+]
+
+Before CMA-ES, collect:
+
+[
+|h_t|,\qquad
+|e_{1,t}|,\qquad
+|e_{2,t}|.
+]
+
+If, hypothetically,
+
+[
+|h_t|=25
+]
+
+while
+
+[
+|e_1|=1.8,
+]
+
+then a mixture with (w_h=.10) isn't really the intuitive “10% movement toward (h)” that I'd hope for.
+I wouldn't automatically normalize (h_t), because its magnitude might contain useful information. Instead we can test both:
+
+[
+h_t
+]
+
+and a norm-matched variant:
+
+[
+\tilde h_t
+==========
+
+h_t\frac{|e_1|}{|h_t|}.
+]
+
+If raw wins, excellent. If norm-matched wins, we've learned that the direction was useful but the representation scales were incompatible.
+
+### 5. The paired-drift test needs one correction
+
+The document proposes branching at (t):
+
+[
+E_t\quad\text{versus}\quad e_{1,t}
+]
+
+and then deterministically completing both trajectories.
+That's a valid **causal total-effect test**, but it doesn't isolate the value of that one drift if the controller remains active afterward. The first intervention changes the next state, which changes subsequent controller features, which changes subsequent drift decisions.
+So I would have **two** paired tests.
+
+For the total effect:
+
+[
+E_t
+\rightarrow
+\text{continue normally with controller}
+]
+
+versus
+
+[
+e_{1,t}
+\rightarrow
+\text{continue normally with controller}.
+]
+
+That asks:
+> What downstream consequence follows from this intervention in the actual system?
+Then an isolation test:
+
+[
+E_t
+\rightarrow
+\boxed{\text{lexical-only thereafter}}
+]
+
+versus
+
+[
+e_{1,t}
+\rightarrow
+\boxed{\text{lexical-only thereafter}}.
+]
+
+Now the only continuous intervention is the one at (t).
+That is much closer to determining whether the controller was right **at that position**.
+There is one larger issue related to a prefered requirement that drift should occur only where it is more often beneficial than discrete transmission.
+The current plan treats that mostly as an **after-the-fact diagnostic**. CMA-ES minimizes average final loss:
+
+[
+\theta^*
+========
+
+\arg\min_\theta E[L_{\rm finish}].
+]
+
+It is therefore possible for a controller to make 60% of its deviations slightly worse but 40% dramatically better and still win overall. That might actually be a perfectly good controller from an optimization standpoint, but it does not satisfy a stronger claim that we could make:
+> Where the controller chooses meaningful drift, drift should have a statistically supported tendency to outperform (e_1).
+I think we can report two quantities:
+
+[
+G=
+E[\Delta L_t\mid d_t>\epsilon]
+]
+
+and
+
+[
+W=
+P(\Delta L_t<0\mid d_t>\epsilon).
+]
+
+The first says how much drift helps on average.
+The second is literally its **win rate against discrete transmission**.
+The operating regime can be something like:
+
+[
+G<0,\qquad W>0.5,
+]
+
+with a confidence interval once there are enough paired interventions.
+I would *not* calculate that expensive paired statistic at every CMA candidate evaluation. That would multiply the compute brutally. Use average downstream loss for CMA-ES, then periodically audit the current champion on a fixed set of paired positions. If the champion's improvements come from pathological rare jackpots rather than reliably useful drift, reject or reconsider it.
+
+### One thing the plan gets particularly right
+
+I like the endpoint ablations:
+
+[
+e_1/e_2,
+]
+
+[
+e_1/h,
+]
+
+[
+e_1/e_2/h,
+]
+
+and static weights.
+Those let us distinguish several very different outcomes.
+If (e_1/e_2) wins, we've learned that retaining lexical ambiguity matters, but (h) isn't contributing.
+If (e_1/h) wins, the unsnapped state matters but runner-up lexical information doesn't.
+If a static mixture wins just as well as the controller, then there was no need for all our gate statistics.
+The really interesting result is:
+
+[
+\boxed{
+\text{dynamic }(e_1,e_2,h)
+
+>
+
+\text{best static mixture}
+
+>
+
+\text{lexical}
+}
+]
+
+coupled with a positive paired intervention win rate.
+That would establish both:
+1. nearby continuous states contain useful performance;
+2. local model state contains information about **where to move**.
+That's much stronger than merely finding a magic mixture.
+
+### One major implementation detail should be added
+The notebook should explicitly use **KV caching**.
+If an implementation agent naïvely recomputes the entire growing sequence through the 1.5B model at each reasoning position, CMA-ES will become unnecessarily expensive.
+The loop should be:
+
+[
+\text{prompt}\rightarrow\text{initial KV cache}
+]
+
+then at each position:
+
+[
+E_t+\text{past_key_values}
+\rightarrow
+h_t,\ell_{t+1},\text{updated cache}.
+]
+
+Even better, the prompt prefix through `<think>` is identical across CMA-ES candidates for a given problem, so that prefix computation can be reused. Candidate trajectories only diverge after the first controlled reasoning input.
+This is the difference between a sensible T4 experiment and one that feels absurdly slow.
+
+
+
+Thats about it as far as I can tell, in terms of fixes to the Agent Generated Plan.
+
+
+===== USER PROMPT 3 @ 2026-08-15T10:10:02.487Z len=310 =====
+Alright. Quick note: if its more convenient for you to work on this as a repository, my OAuth credentials for Git should be active in this and you are absolutely welcome to yeet whatever you want up to a private repository, under whatever name works best for you, so that you can have access to diff tools etc.
+
+
+===== USER PROMPT 4 @ 2026-08-15T10:32:09.808Z len=2283 =====
+Alright, so for the most part, we can keep this experiment really informal. Truth be told, I have another project that is important to me, (I would like personally to think of that project as more of a demostration than an experiment, but we will want everything with that to be above reproach) and I am deciding right now how much is worth including in that larger work. This current setup is just a small, personal inquery to establish which direction I want to pursue in the larger work, so we don't need to go overboard, we aren't going to be seeking peer review, or making any grant proposals, we just want to establish that this can move the needle. Its absed on an earlier success that I had with model-to-model colaberation, which worked very well, this is obviously a single model; but for all intents and purposes we can assert that he is talking to himself, an we want to optimize that edge. The idea is pretty simple - tokens are needed for communicating with humans, but from a machines perspective - they are just numbers, and there are a finite number of the discreate ones, so we are looking to cut out the middle man, and let the model's self talk be in its native language, continuios embeddings. Now this particular model has been trained to reason from text, so he isn't going to want to drift too far from those installed priors, but I suspect that we should see some improvement. Later, in another setup - we will be training the second half of the process, generating a response from reasoning (which will be managed by an independant model from the first) torespond to the continous embeddings; but for now, it is worth the effortto establishthat even without explicite training, thediscrete token embeddings do not always represent the best streering signal for the down stream response.
+
+We will be running this on a Colab T4 instance, because the computer I am at is not really up to the task. This computer does have a wsl instance, and from there you can access the colab-cli program which should also already have my OAuth credentials which will allow you to instantiate instances, run scripts their, upload and download files as needed, and whatever else. You can begin getting things set up, and if there is anything you need fromme, just let me know.
+
+
+===== USER PROMPT 5 @ 2026-08-15T11:05:21.720Z len=54 =====
+Sounds good, you can begin a dynamic-controller search
+
+
+===== USER PROMPT 6 @ 2026-08-16T06:46:36.458Z len=332 =====
+Alright, I have archived that directory, and moved this project onto the C:/ drive. your relative paths are all the same. We can follow you recomendaton, but we may also want to add a branch that explores the addition of an e3 into the polytope we are spanning and traversing, just incase the third runner up has more to contribute.
+
+
+===== USER PROMPT 7 @ 2026-08-16T07:57:42.041Z len=550 =====
+So, in terms of GPU VRAM, it would represent a downgrade, but at some point we are probably want to run a larger, longer search with many more search problems to dial in what we can> I am not afraid of letting a loop run for hours, or even over night if it means getting the data we need to make an intelligent and informed decision.  If it would help things, I can move this session to a laptop, with a better cpu. (still only 8GB RAM) and a GPU (RTX 4050 6GB VRAM), for a longer run.  Do you want to continue remotely, or try an extended local run?
+
+
+===== USER PROMPT 8 @ 2026-08-16T08:06:14.092Z len=159 =====
+I think we also have access to a v5e-1 TPU instance with 16GB of HBM, 48GB of RAM and 197 TFLOPS (BF16), Do you like the T4 or the v5e-1 TPU for this workload?
+
+
+===== USER PROMPT 9 @ 2026-08-16T08:33:09.823Z len=472 =====
+Another option is to use my Kaggle Acount, which priveds 30 free hours a week. If we set up a Kaggle Kernel (notebook) we also gain access to the following runtime options: GPU P100, GPU T4 x 2, and v5e-8 TPU (16GB per chip, 128GB total HBM), so if a solid TPU path gets formulated we could probably speed things up quite a bit in terms of batching, but JAX, XLA, and even TensorFlow are a bit outside of my experience. It is free hardware though, so we might consider it.
+
+
+===== USER PROMPT 10 @ 2026-08-16T08:46:30.381Z len=448 =====
+If we go that route we would need to use the official Kaggle CLI which operates as an asynchronous batch execution system. You submit a notebook or script to Kaggle, Kaggle spins up an isolated runtime, executes the code from start to finish, saves the outputs, and shuts the instance down. It might make sense for you to start by learning that system, and authoring some skills and tools that you can use to seamlessly operate in that environment.
+
+
+===== USER PROMPT 11 @ 2026-08-16T09:06:24.931Z len=157 =====
+I have not used the Kaggle Cli from this machine before, but I brought over a legacy API key from my laptop, and placed it in this directory at 'kaggle.json'
+
+
+===== USER PROMPT 12 @ 2026-08-16T09:36:22.992Z len=470 =====
+So you got to observe the TPU draw back yourself, the one major problem there is that your workflow can wait ~20 minutes in a queue before getting run. CPU and GPU worloads usually only wait ~30 seconds or so, so when we set up for a TPU job we will want to avoid unnecissary smoke tests, and amke the wait worth it. Do you want to get us set up for a large T4 project that we can set and forget, then come back to the output when it wraps up, and see what we can learn?
+
+
+===== USER PROMPT 13 @ 2026-08-16T09:58:42.192Z len=4767 =====
+Obviously, I can monitor the progress through the web app, and be notified if something goes wrong, or when the workload wraps up. Everything looks good right now. The current log readout is:
+"""
+Time
+
+
+#
+
+
+Log Message
+1.0s
+0
+[setup] installing pinned dependencies
+4.5s
+1
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 44.0/44.0 kB 2.2 MB/s eta 0:00:00
+5.8s
+2
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 328.3/328.3 kB 13.2 MB/s eta 0:00:00
+6.0s
+3
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.0/12.0 MB 100.4 MB/s eta 0:00:00
+6.0s
+4
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 529.0/529.0 kB 35.3 MB/s eta 0:00:00
+6.0s
+5
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 389.2/389.2 kB 28.1 MB/s eta 0:00:00
+6.0s
+6
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 516.0/516.0 kB 29.3 MB/s eta 0:00:00
+6.1s
+7
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 566.4/566.4 kB 30.3 MB/s eta 0:00:00
+27.4s
+8
+{
+27.4s
+9
+  "hardware": {
+27.4s
+10
+    "nvidia_smi": [
+27.4s
+11
+      "0, Tesla T4, 15360, 7.5",
+27.4s
+12
+      "1, Tesla T4, 15360, 7.5"
+27.4s
+13
+    ],
+27.4s
+14
+    "torch": "2.10.0+cu128",
+27.4s
+15
+    "devices": [
+27.4s
+16
+      {
+27.4s
+17
+        "index": 0,
+27.4s
+18
+        "name": "Tesla T4",
+27.4s
+19
+        "capability": [
+27.4s
+20
+          7,
+27.4s
+21
+          5
+27.4s
+22
+        ],
+27.4s
+23
+        "matmul_value": 128.0,
+27.4s
+24
+        "matmul_ok": true
+27.4s
+25
+      },
+27.4s
+26
+      {
+27.4s
+27
+        "index": 1,
+27.4s
+28
+        "name": "Tesla T4",
+27.4s
+29
+        "capability": [
+27.4s
+30
+          7,
+27.4s
+31
+          5
+27.4s
+32
+        ],
+27.4s
+33
+        "matmul_value": 128.0,
+27.4s
+34
+        "matmul_ok": true
+27.4s
+35
+      }
+27.4s
+36
+    ]
+27.4s
+37
+  }
+27.4s
+38
+}
+27.4s
+39
+[setup] resolving pinned model and fresh problem splits
+54.3s
+40
+{
+54.3s
+41
+  "model_path": "/tmp/cot-drift-hf/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-1.5B/snapshots/ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562",
+54.3s
+42
+  "split_sizes": {
+54.3s
+43
+    "calibration": 8,
+54.3s
+44
+    "search": 24,
+54.3s
+45
+    "validation": 24,
+54.3s
+46
+    "holdout": 96
+54.3s
+47
+  }
+54.3s
+48
+}
+54.3s
+49
+{"state": "running", "elapsed_seconds": 0.0017146900000284404, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+84.3s
+50
+{"state": "running", "elapsed_seconds": 30.002246496999987, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+114.3s
+51
+{"state": "running", "elapsed_seconds": 60.00294097599999, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+144.3s
+52
+{"state": "running", "elapsed_seconds": 90.003839143, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+174.3s
+53
+{"state": "running", "elapsed_seconds": 120.00475897400003, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+51.5s
+54
+
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]
+Fetching 9 files:  11%|█         | 1/9 [00:00<00:01,  5.29it/s]
+Fetching 9 files:  78%|███████▊  | 7/9 [00:20<00:06,  3.02s/it]
+Fetching 9 files: 100%|██████████| 9/9 [00:20<00:00,  2.26s/it]
+54.3s
+55
+
+Generating train split:   0%|          | 0/7473 [00:00<?, ? examples/s]
+Generating train split: 100%|██████████| 7473/7473 [00:00<00:00, 105691.34 examples/s]
+54.3s
+56
+
+Generating test split:   0%|          | 0/1319 [00:00<?, ? examples/s]
+Generating test split: 100%|██████████| 1319/1319 [00:00<00:00, 257184.09 examples/s]
+204.3s
+57
+{"state": "running", "elapsed_seconds": 150.005676441, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+234.3s
+58
+{"state": "running", "elapsed_seconds": 180.006592787, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+264.3s
+59
+{"state": "running", "elapsed_seconds": 210.00753260200003, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+294.3s
+60
+{"state": "running", "elapsed_seconds": 240.00839669699997, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+324.3s
+61
+{"state": "running", "elapsed_seconds": 270.009425578, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+354.3s
+62
+{"state": "running", "elapsed_seconds": 300.01040362599997, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": null}, "e1_e2_e3_h": {"returncode": null, "checkpoint": null}}}
+"""
+
+
+===== USER PROMPT 14 @ 2026-08-16T10:03:40.105Z len=317 =====
+If we go about all of this the right way, we could find a quick fix for almost any C-o-T based platform that substantively reduces loss, without even touching the weights of the underlying model. We can just flip the correct switches, and stop forcing the model to use lossy human language when reasoning with itself.
+
+
+===== USER PROMPT 15 @ 2026-08-16T10:14:25.474Z len=847 =====
+My real work is geared towards training a model to reason in its own native representations, without the human lexical embedding manifold (some "soft snapping" to defined targets will be used because it keeps the model from drifting down a rabbit hole, and can have a "denoising" effect that is benificial.), That is the domain where the improvements should really be apparent. I was actually advised to leave off the C-o-T ad-hoc attempts, but I just see too much potential utility in finding a way to "upgrade" an existing model's performance to not at least explore the potential with some quick experiments.  It takes a lot of compute to produce a 14% reduction in loss from a trained model's assumed basin when models scale to a certain size. Having a simple way to dip below that basin with an informed reasoning policy seems worth pursuing.
+
+
+===== USER PROMPT 16 @ 2026-08-16T10:25:09.439Z len=620 =====
+generation 3 has wrapped up, but we are not seeing much improvement so far. gen 1 still hlds the title.
+1944.4s
+{"state": "running", "elapsed_seconds": 1890.0825917720003, "workers": {"e1_e2_h": {"returncode": null, "checkpoint": {"state": "searching", "generation": 3, "total_generations": 24, "best_generation": 3, "best_validation_loss": 2.101103605648497, "elapsed_seconds": 1474.5565485954285}}, "e1_e2_e3_h": {"returncode": null, "checkpoint": {"state": "searching", "generation": 4, "total_generations": 24, "best_generation": 1, "best_validation_loss": 2.215042231783714, "elapsed_seconds": 1856.790503501892}}}}
+
+
+===== USER PROMPT 17 @ 2026-08-16T13:45:19.847Z len=30 =====
+our kaggle run has wrapped up.
+
+
+===== USER PROMPT 18 @ 2026-08-16T14:06:25.969Z len=6705 =====
+Yes. I would make the next experiment **much narrower and much larger**. The last run gave you a reason to stop exploring the whole polytope for a moment and characterize the (e_1/\tilde h) edge properly.
+
+I would structure it in three stages.
+
+### 1. Large static-(\alpha) replication
+
+Define
+
+[
+E_{t+1}=(1-\alpha)e_{1,t+1}+\alpha\tilde h_t
+]
+
+and sweep exactly the sort of grid you proposed:
+
+[
+\alpha\in{0,.025,.05,.075,.10,.125,.15}.
+]
+
+I'd probably add (0.20) as a deliberately somewhat-too-large point. Not because I expect it to win, but because seeing the response curve turn back upward would help demonstrate that we have a genuine interior optimum rather than "more hidden state keeps helping."
+
+The important result here is no longer merely:
+
+[
+L(.10)<L(0).
+]
+
+We want to see a **response curve**:
+
+[
+L(\alpha).
+]
+
+If something like
+
+[
+L(0)>L(.025)>L(.05)>L(.075)\approx L(.10)
+<L(.125)<L(.15)
+]
+
+appears over a much larger sample, that is far stronger evidence for the mechanism than reproducing one hand-picked 90/10 mixture.
+
+I'd use enough validation examples to select (\alpha) with reasonable stability, then one substantial untouched test partition for the final comparison. Because all seven policies run over the same problems, keep everything paired.
+
+For every (\alpha), retain:
+
+[
+\Delta L_i(\alpha)
+==================
+
+L_i(\alpha)-L_i(0),
+]
+
+exact match, median change, trimmed mean, win rate, and confidence intervals.
+
+The **shape** is now as important as the best point.
+
+### 2. Then build the smallest possible dynamic controller
+
+Only after determining the static optimum:
+
+[
+\alpha_0.
+]
+
+Don't give the controller (e_2), (e_3), or a three/four-way simplex.
+
+Give it exactly one job:
+
+[
+\alpha_t=\alpha_0+\delta_t.
+]
+
+And something like:
+
+[
+E_{t+1}
+=======
+
+(1-\alpha_t)e_1+\alpha_t\tilde h_t.
+]
+
+Bound (\alpha_t) to the experimentally supported neighborhood. If the sweep says useful territory appears to be roughly 5–15%, perhaps initially allow:
+
+[
+\alpha_t\in[0,.20].
+]
+
+Now the dynamic question is very clean:
+
+> Given that approximately 10% drift is globally useful, can local context tell us when to use 6%, 10%, 15%, or effectively 0%?
+
+That's a dramatically easier learning/search problem than asking CMA-ES to discover direction, vertices, and magnitude simultaneously.
+
+I'd start with perhaps **three or four controller inputs**, chosen from the most distinct measurements:
+
+[
+\ell_1-\ell_2,
+\qquad
+p_1,
+\qquad
+N_{\rm eff},
+\qquad
+\cos(h,e_1)
+]
+
+or whatever the prior traces suggest separates the static-policy wins from losses.
+
+Then:
+
+[
+\delta_t=w^\top\phi_t+b.
+]
+
+That's five parameters or so rather than dozens.
+
+If even that cannot beat the static optimum on held-out data, that's useful evidence that the effect may be largely context-independent at this stage of the pretrained model.
+
+If it does beat static, **then** increase controller richness.
+
+### 3. Native unconstrained generation should absolutely enter now
+
+But I would add **two** native conditions, not one.
+
+Right now the causal result is:
+
+[
+\text{fixed-}T\text{ drift}
+\quad\text{versus}\quad
+\text{fixed-}T\text{ lexical}.
+]
+
+That's internally clean.
+
+Now add:
+
+[
+\boxed{\text{native lexical generation}}
+]
+
+and:
+
+[
+\boxed{\text{native static-drift generation}}.
+]
+
+For the latter, allow DeepSeek to terminate its reasoning naturally. Until it emits its normal reasoning boundary, use:
+
+[
+E_{t+1}
+=======
+
+(1-\alpha^*)e_1+\alpha^*\tilde h_t.
+]
+
+Once it enters the final answer, revert to ordinary lexical recurrence if you want to keep the intervention specifically scoped to reasoning.
+
+Then you have two different causal questions:
+
+[
+\text{Fixed-128 lexical}
+\leftrightarrow
+\text{Fixed-128 drift}
+]
+
+asks:
+
+> Does drift help when reasoning compute is controlled?
+
+And:
+
+[
+\text{Native lexical}
+\leftrightarrow
+\text{Native drift}
+]
+
+asks:
+
+> Does the optimization improve the model under something closer to its ordinary operating regime?
+
+That's the latter comparison you ultimately need before saying anything like "this improves DeepSeek."
+
+Simply comparing fixed-128 drift against native DeepSeek would be hard to interpret because both recurrence and reasoning budget changed.
+
+---
+
+I would also record **native reasoning length** under drift.
+
+That's potentially fascinating.
+
+Perhaps:
+
+[
+\alpha=.10
+]
+
+improves answer loss while reasoning length stays unchanged.
+
+Fine.
+
+But perhaps it produces:
+
+[
+\text{same/better accuracy}
+]
+
+with:
+
+[
+\text{fewer reasoning tokens}.
+]
+
+Then the mechanism may be making the intermediate computation more efficient rather than merely improving its endpoint.
+
+Or it could make reasoning longer, which is also important to know when calculating actual inference cost.
+
+So under native stopping, record:
+
+[
+\text{reasoning tokens},
+\quad
+\text{total tokens},
+\quad
+\text{exact match},
+\quad
+\text{target NLL}.
+]
+
+### I would also use the static sweep to test recurrence-dose dependence
+
+You currently know something interesting at (T=128). We don't know whether 10% is a property of the local geometry or partly a property of applying that intervention 128 times.
+
+Once you've identified the best few (\alpha)'s, I would cheaply retest those at perhaps:
+
+[
+T=64,\quad128,\quad256
+]
+
+if compute permits.
+
+You don't need the full seven-point sweep at all three budgets initially. Perhaps take:
+
+[
+\alpha\in{0,.05,.10,.15}.
+]
+
+Then ask whether:
+
+[
+\alpha^*(T)
+]
+
+moves systematically.
+
+If optimum drift shrinks as (T) increases, that's evidence for cumulative perturbation.
+
+If approximately the same (\alpha) wins at all reasoning lengths, that's arguably even more interesting.
+
+---
+
+So my recommended fresh experiment is:
+
+[
+\boxed{
+\begin{array}{l}
+\textbf{A.}~\text{Large static }e_1/\tilde h\text{ sweep}\
+\downarrow\
+\text{establish }L(\alpha)\text{ and choose }\alpha^*\
+\downarrow\
+\textbf{B.}~\text{Native lexical vs native }\alpha^*\text{ drift}\
+\downarrow\
+\textbf{C.}~\text{tiny adaptive-}\alpha\text{ controller around }\alpha^*\
+\downarrow\
+\text{static }\alpha^*\text{ vs dynamic }\alpha_t
+\end{array}}
+]
+
+I would actually postpone (e_2/e_3) entirely during this experiment. The recent result gave you something simpler and better supported to characterize first.
+
+The formal question has become beautifully narrow:
+
+> **Does a frozen reasoning model have a reproducible interior optimum between its selected lexical embedding and the norm-matched direction of its contextual hidden state, and can local model state predict beneficial departures from that optimum?**
+
+The first half now has preliminary positive evidence. The next experiment should try very hard to establish or kill it before we make the mechanism complicated again.
+
+
+===== USER PROMPT 19 @ 2026-08-16T16:38:46.539Z len=35 =====
+the last kaggel run has wrapped up.
